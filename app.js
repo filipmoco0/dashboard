@@ -633,7 +633,7 @@ async function saveSection() {
 
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); closeSectionSheet(); }
+  if (e.key === 'Escape') { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
 });
 
 document.getElementById('l-password').addEventListener('keydown', e => {
