@@ -312,12 +312,6 @@ body {
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-label { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
 
-/* ─── bottom sheet (mobile only) ─────────────────────────── */
-.sheet-backdrop { display: none; }
-.section-sheet  { display: none; }
-.sheet-title    { display: none; }
-.sheet-btn      { display: none; }
-
 /* ─── mobile bottom tab bar (hidden on desktop) ───────────── */
 .mobile-tabbar  { display: none; }
 
@@ -326,29 +320,6 @@ body {
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 700px) {
   #app.visible { flex-direction: column; }
-
-  /* ── bottom sheet (section context menu) ── */
-  .sheet-backdrop {
-    display: none; position: fixed; inset: 0;
-    z-index: 98; background: rgba(0,0,0,0.35);
-  }
-  .sheet-backdrop.open { display: block; }
-
-  .section-sheet {
-    display: none; flex-direction: column;
-    position: fixed; bottom: var(--tabbar-h); left: 0; right: 0;
-    background: var(--bg); border-top: 0.5px solid var(--border);
-    border-radius: 16px 16px 0 0; padding: 16px;
-    z-index: 99; gap: 4px;
-    transform: translateY(100%); transition: transform 0.22s ease;
-  }
-  .section-sheet.open { display: flex; transform: translateY(0); }
-
-  .sheet-title { display: block; font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-primary); padding-bottom: 10px; border-bottom: 0.5px solid var(--border); margin-bottom: 4px; }
-
-  .sheet-btn { display: flex; font-family: var(--mono); font-size: 14px; background: none; border: none; padding: 14px 10px; cursor: pointer; color: var(--text-secondary); text-align: left; border-radius: var(--radius-md); transition: background 0.12s; align-items: center; gap: 12px; }
-  .sheet-btn:active { background: var(--bg-secondary); }
-  .sheet-btn.danger { color: var(--danger); }
 
   /* ── hide desktop sidebar entirely ── */
   .sidebar { display: none; }

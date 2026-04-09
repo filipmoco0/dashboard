@@ -16,7 +16,6 @@ let editingNoteId     = null;
 let activeNoteSection = null;
 
 /* section targeted by the mobile sheet */
-let sheetTargetSection = null;
 
 const FALLBACK_ICONS = {
   'ic-teal':'🔗','ic-blue':'🔵','ic-purple':'💜','ic-pink':'🌸',
@@ -239,14 +238,6 @@ function renderMobileTabbar() {
     btn.innerHTML = `<span class="tab-icon">${sectionIcon(s.type)}</span><span>${s.label}</span>`;
     btn.onclick = () => switchSection(s.id);
 
-    /* long press → section sheet */
-    let pressTimer = null;
-    btn.addEventListener('touchstart', () => {
-      pressTimer = setTimeout(() => openSectionSheet(s.id), 500);
-    }, { passive: true });
-    btn.addEventListener('touchend',  () => clearTimeout(pressTimer));
-    btn.addEventListener('touchmove', () => clearTimeout(pressTimer));
-
     container.appendChild(btn);
   });
 }
@@ -270,14 +261,6 @@ function renderSidebar() {
     btn.onclick = () => switchSection(s.id);
 
     row.appendChild(btn);
-
-    /* mobile: long press opens the sheet */
-    let pressTimer = null;
-    btn.addEventListener('touchstart', () => {
-      pressTimer = setTimeout(() => openSectionSheet(s.id), 500);
-    }, { passive: true });
-    btn.addEventListener('touchend',   () => clearTimeout(pressTimer));
-    btn.addEventListener('touchmove',  () => clearTimeout(pressTimer));
 
     nav.appendChild(row);
   });
@@ -338,49 +321,6 @@ async function removeSection(sectionId) {
   if (state.activeSection === sectionId) state.activeSection = state.sections[0]?.id || null;
   renderSidebar();
   renderMain();
-}
-
-/* ─── mobile bottom sheet ─────────────────────────────────── */
-function openSectionSheet(sectionId) {
-  sheetTargetSection = sectionId;
-  const section = state.sections.find(s => s.id === sectionId);
-  const idx     = state.sections.findIndex(s => s.id === sectionId);
-  const sheet   = document.getElementById('section-sheet');
-  const title   = document.getElementById('sheet-title');
-  const actions = document.getElementById('sheet-actions');
-
-  title.textContent = section ? section.label : '';
-  actions.innerHTML = '';
-
-  if (idx > 0) {
-    const up = document.createElement('button');
-    up.className = 'sheet-btn';
-    up.innerHTML = '↑ &nbsp;move up';
-    up.onclick = () => { closeSectionSheet(); moveSectionUp(sectionId); };
-    actions.appendChild(up);
-  }
-  if (idx < state.sections.length - 1) {
-    const down = document.createElement('button');
-    down.className = 'sheet-btn';
-    down.innerHTML = '↓ &nbsp;move down';
-    down.onclick = () => { closeSectionSheet(); moveSectionDown(sectionId); };
-    actions.appendChild(down);
-  }
-
-  const del = document.createElement('button');
-  del.className = 'sheet-btn danger';
-  del.innerHTML = '× &nbsp;delete section';
-  del.onclick = () => { closeSectionSheet(); removeSection(sectionId); };
-  actions.appendChild(del);
-
-  document.getElementById('sheet-backdrop').classList.add('open');
-  sheet.classList.add('open');
-}
-
-function closeSectionSheet() {
-  document.getElementById('section-sheet').classList.remove('open');
-  document.getElementById('sheet-backdrop').classList.remove('open');
-  sheetTargetSection = null;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -691,7 +631,6 @@ async function saveSection() {
   });
 });
 
-document.getElementById('sheet-backdrop').addEventListener('click', closeSectionSheet);
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); closeSectionSheet(); }
