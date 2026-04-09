@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════
+       LOGIN PAGE
+  ═══════════════════════════════════════════════════════ -->
+  <div id="login-page">
+    <div class="login-box">
+      <div class="login-logo">moco<span>.wtf</span></div>
+      <div class="field">
+        <label>email</label>
+        <input id="l-email" type="email" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label>password</label>
+        <input id="l-password" type="password" placeholder="••••••••" />
+      </div>
+      <div class="login-error" id="login-error">incorrect email or password</div>
+      <button class="btn-primary" onclick="doLogin()">sign in</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       APP SHELL
+  ═══════════════════════════════════════════════════════ -->
+  <div id="app">
+
+    <!-- sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo" id="header-logo">moco<span>.wtf</span></span>
+        <span class="tagline" id="header-tagline">building stuff · breaking things</span>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <!-- dynamically rendered -->
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="nav-item" onclick="openSettings()">
+          <span class="nav-item-icon">⚙</span> settings
+        </button>
+        <button class="nav-item" onclick="doLogout()">
+          <span class="nav-item-icon">→</span> sign out
+        </button>
+      </div>
+    </aside>
+
+    <!-- main -->
+    <main class="main">
+      <div class="main-header">
+        <div class="main-title" id="main-title">—</div>
+        <div class="main-actions">
+          <button class="btn-add" id="btn-add-card" onclick="openCardModal()">+ add</button>
+        </div>
+      </div>
+      <div class="main-body">
+        <div class="grid-wide" id="main-grid"></div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       CARD MODAL
+  ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-card">
+    <div class="modal">
+      <div class="modal-title" id="modal-card-title">add item</div>
+
+      <div class="field">
+        <label>title</label>
+        <input id="f-name" type="text" placeholder="e.g. homelab" />
+      </div>
+      <div class="field">
+        <label>description</label>
+        <input id="f-desc" type="text" placeholder="short note" />
+      </div>
+      <div class="field" id="f-url-wrap">
+        <label>url</label>
+        <input id="f-url" type="text" placeholder="https://" />
+      </div>
+      <div class="field">
+        <label>color</label>
+        <select id="f-color">
+          <option value="ic-teal">teal</option>
+          <option value="ic-blue">blue</option>
+          <option value="ic-purple">purple</option>
+          <option value="ic-pink">pink</option>
+          <option value="ic-amber">amber</option>
+          <option value="ic-coral">coral</option>
+          <option value="ic-green">green</option>
+          <option value="ic-gray">gray</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>emoji icon</label>
+        <input id="f-icon" type="text" placeholder="e.g. 🔧" maxlength="2" />
+      </div>
+
+      <!-- projects only -->
+      <div class="field" id="f-visibility-wrap" style="display:none;">
+        <label>visibility</label>
+        <select id="f-visibility">
+          <option value="personal">personal</option>
+          <option value="public">public</option>
+        </select>
+      </div>
+      <div class="field" id="f-progress-wrap" style="display:none;">
+        <label>progress</label>
+        <select id="f-progress">
+          <option value="in-progress">in progress</option>
+          <option value="done">done</option>
+        </select>
+      </div>
+
+      <!-- linked note -->
+      <div class="field" id="f-note-wrap" style="display:none;">
+        <label>linked note</label>
+        <select id="f-linked-note">
+          <option value="">— none —</option>
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeCardModal()">cancel</button>
+        <button class="btn-save"   onclick="saveCard()">save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       NOTE EDITOR MODAL
+  ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-note">
+    <div class="modal modal-wide">
+      <div class="modal-title" id="modal-note-title">note</div>
+      <div class="field">
+        <label>title</label>
+        <input id="fn-name" type="text" placeholder="note title" />
+      </div>
+      <div class="field">
+        <label>content</label>
+        <textarea id="fn-content" rows="8" placeholder="write your note here..."></textarea>
+      </div>
+      <div class="field">
+        <label>color</label>
+        <select id="fn-color">
+          <option value="ic-teal">teal</option>
+          <option value="ic-blue">blue</option>
+          <option value="ic-purple">purple</option>
+          <option value="ic-pink">pink</option>
+          <option value="ic-amber">amber</option>
+          <option value="ic-coral">coral</option>
+          <option value="ic-green">green</option>
+          <option value="ic-gray">gray</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>emoji icon</label>
+        <input id="fn-icon" type="text" placeholder="e.g. 📝" maxlength="2" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeNoteModal()">cancel</button>
+        <button class="btn-save"   onclick="saveNote()">save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       ADD SECTION MODAL
+  ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-section">
+    <div class="modal">
+      <div class="modal-title">add section</div>
+      <div class="field">
+        <label>section name</label>
+        <input id="fs-name" type="text" placeholder="e.g. resources" />
+      </div>
+      <div class="field">
+        <label>type</label>
+        <select id="fs-type">
+          <option value="generic">generic (cards)</option>
+          <option value="projects">projects (with tags)</option>
+          <option value="notes">notes</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeSectionModal()">cancel</button>
+        <button class="btn-save"   onclick="saveSection()">save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       SETTINGS MODAL
+  ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-settings">
+    <div class="modal">
+      <div class="modal-title">settings</div>
+
+      <div class="field">
+        <label>site name</label>
+        <input id="s-name" type="text" placeholder="moco.wtf" />
+      </div>
+      <div class="field">
+        <label>tagline</label>
+        <input id="s-tagline" type="text" placeholder="building stuff · breaking things" />
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-label" style="margin-bottom:6px;">sections order</div>
+      <div id="settings-sections-list"></div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-row">
+        <span class="settings-label">export data</span>
+        <button class="btn-action" onclick="exportData()">export JSON</button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">import data</span>
+        <button class="btn-action" onclick="document.getElementById('import-file').click()">import JSON</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)" />
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">reset everything</span>
+        <button class="btn-action btn-danger" onclick="resetData()">reset</button>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeSettings()">cancel</button>
+        <button class="btn-save"   onclick="saveSettings()">save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── mobile section management sheet (hidden on desktop via CSS) ── -->
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <div class="section-sheet" id="section-sheet">
+    <div class="sheet-title" id="sheet-title"></div>
+    <div id="sheet-actions"></div>
+  </div>
+
+  <!-- scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="db.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
