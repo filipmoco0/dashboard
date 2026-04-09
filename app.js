@@ -227,10 +227,36 @@ async function resetData() {
   closeSettings();
 }
 
+/* ─── mobile bottom tab bar ───────────────────────────────── */
+function renderMobileTabbar() {
+  const container = document.getElementById('tabbar-sections');
+  if (!container) return;
+  container.innerHTML = '';
+
+  state.sections.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = 'tabbar-tab' + (s.id === state.activeSection ? ' active' : '');
+    btn.innerHTML = `<span class="tab-icon">${sectionIcon(s.type)}</span><span>${s.label}</span>`;
+    btn.onclick = () => switchSection(s.id);
+
+    /* long press → section sheet */
+    let pressTimer = null;
+    btn.addEventListener('touchstart', () => {
+      pressTimer = setTimeout(() => openSectionSheet(s.id), 500);
+    }, { passive: true });
+    btn.addEventListener('touchend',  () => clearTimeout(pressTimer));
+    btn.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+    container.appendChild(btn);
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════════════════════════════ */
 function renderSidebar() {
+  renderMobileTabbar();
+
   const nav = document.getElementById('sidebar-nav');
   nav.innerHTML = '';
 

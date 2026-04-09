@@ -250,6 +250,27 @@
     <div id="sheet-actions"></div>
   </div>
 
+  <!-- ── mobile bottom tab bar (hidden on desktop via CSS) ── -->
+  <nav class="mobile-tabbar" id="mobile-tabbar">
+    <div class="tabbar-sections" id="tabbar-sections">
+      <!-- dynamically rendered by app.js -->
+    </div>
+    <div class="tabbar-actions">
+      <button class="tabbar-btn" onclick="openSectionModal()" title="add section">
+        <span class="tab-icon">＋</span>
+        <span>section</span>
+      </button>
+      <button class="tabbar-btn" onclick="openSettings()" title="settings">
+        <span class="tab-icon">⚙</span>
+        <span>settings</span>
+      </button>
+      <button class="tabbar-btn add-btn" id="tabbar-add-btn" onclick="openCardModal()" title="add item">
+        <span class="tab-icon">+</span>
+        <span>add</span>
+      </button>
+    </div>
+  </nav>
+
   <!-- scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="config.js"></script>
