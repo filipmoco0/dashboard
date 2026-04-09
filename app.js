@@ -93,11 +93,15 @@ function mapCard(row) {
 function showLogin() {
   document.getElementById('login-page').classList.add('visible');
   document.getElementById('app').classList.remove('visible');
+  const tb = document.getElementById('mobile-tabbar');
+  if (tb) tb.classList.remove('visible');
 }
 
 function showApp() {
   document.getElementById('login-page').classList.remove('visible');
   document.getElementById('app').classList.add('visible');
+  const tb = document.getElementById('mobile-tabbar');
+  if (tb) tb.classList.add('visible');
   renderSidebar();
   renderMain();
   applySettings();
