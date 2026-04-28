@@ -148,7 +148,9 @@
       </div>
       <div class="field">
         <label>content</label>
-        <textarea id="fn-content" rows="8" placeholder="write your note here..."></textarea>
+        <textarea id="fn-content" rows="8" placeholder="write markdown here..." oninput="scheduleNoteAutosave()"></textarea>
+        <div class="note-editor-meta"><span id="fn-status">loaded</span><span>markdown preview below</span></div>
+        <div id="fn-preview" class="note-preview"></div>
       </div>
       <div class="field">
         <label>color</label>
@@ -190,11 +192,39 @@
           <option value="generic">generic (cards)</option>
           <option value="projects">projects (with tags)</option>
           <option value="notes">notes</option>
+          <option value="files">files (Supabase upload)</option>
         </select>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeSectionModal()">cancel</button>
         <button class="btn-save"   onclick="saveSection()">save</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════
+       FILE UPLOAD MODAL
+  ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-file-upload">
+    <div class="modal">
+      <div class="modal-title">upload file</div>
+      <div class="field">
+        <label>file</label>
+        <input id="fu-file" type="file" />
+      </div>
+      <div class="field">
+        <label>title</label>
+        <input id="fu-title" type="text" placeholder="auto from filename" />
+      </div>
+      <div class="field">
+        <label>description</label>
+        <input id="fu-desc" type="text" placeholder="optional" />
+      </div>
+      <div id="fu-status" class="upload-status"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeFileUploadModal()">cancel</button>
+        <button class="btn-save" onclick="saveUploadedFile()">upload</button>
       </div>
     </div>
   </div>

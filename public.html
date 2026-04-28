@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Public Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="main public-main">
+    <div class="main-header">
+      <div class="main-title">public projects</div>
+    </div>
+    <div class="main-body">
+      <div class="grid-wide" id="public-grid"><div class="empty-state">loading…</div></div>
+    </div>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script>
+    const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON);
+    const grid = document.getElementById('public-grid');
+    function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    async function loadPublic(){
+      const { data, error } = await sb.from('cards')
+        .select('name,description,url,icon,color,progress,visibility')
+        .eq('visibility','public')
+        .order('position',{ascending:true});
+      if(error){ grid.innerHTML='<div class="empty-state">public mode needs the optional SQL policy</div>'; return; }
+      grid.innerHTML='';
+      if(!data.length){ grid.innerHTML='<div class="empty-state">no public cards yet</div>'; return; }
+      data.forEach(c=>{
+        const el=document.createElement('div');
+        el.className='card card-link';
+        el.onclick=()=>{ if(c.url) window.open(c.url,'_blank','noopener,noreferrer'); };
+        el.innerHTML=`<div class="card-icon ${esc(c.color||'ic-teal')}">${esc(c.icon||'🔗')}</div>
+          <div class="card-name">${esc(c.name)}</div>
+          ${c.description?`<div class="card-desc">${esc(c.description)}</div>`:''}
+          ${c.url?`<div class="card-url">${esc(c.url.replace(/^https?:\\/\\//,''))}</div>`:''}
+          <div class="tag-row"><span class="tag tag-public">public</span></div>`;
+        grid.appendChild(el);
+      });
+    }
+    loadPublic();
+  </script>
+</body>
+</html>

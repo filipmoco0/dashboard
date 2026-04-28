@@ -177,3 +177,47 @@ async function dbUpdateCardPosition(cardId, position) {
     .eq('id', cardId);
   if (error) throw error;
 }
+
+
+/* ═══════════════════════════════════════════════════════════
+   SUPABASE STORAGE
+   Bucket: dashboard-files
+   ═══════════════════════════════════════════════════════════ */
+const DASHBOARD_FILES_BUCKET = 'dashboard-files';
+
+function safeStorageName(name) {
+  return String(name || 'file')
+    .normalize('NFKD')
+    .replace(/[^\w.\-]+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 120);
+}
+
+async function dbUploadDashboardFile(userId, file) {
+  const path = `${userId}/${Date.now()}-${safeStorageName(file.name)}`;
+  const { error } = await getClient()
+    .storage
+    .from(DASHBOARD_FILES_BUCKET)
+    .upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
+  if (error) throw error;
+  return { bucket: DASHBOARD_FILES_BUCKET, path };
+}
+
+async function dbCreateFileSignedUrl(path, downloadName = false) {
+  const options = downloadName ? { download: typeof downloadName === 'string' ? downloadName : true } : undefined;
+  const { data, error } = await getClient()
+    .storage
+    .from(DASHBOARD_FILES_BUCKET)
+    .createSignedUrl(path, 60 * 60, options);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+async function dbDeleteDashboardFile(path) {
+  const { error } = await getClient()
+    .storage
+    .from(DASHBOARD_FILES_BUCKET)
+    .remove([path]);
+  if (error) throw error;
+}
+

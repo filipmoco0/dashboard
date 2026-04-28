@@ -9,6 +9,8 @@ const state = {
   sections:      [],
   cards:         {},
   activeSection: null,
+  search: '',
+  filter: 'all',
 };
 
 let editingCardId     = null;
@@ -52,7 +54,8 @@ async function loadAll() {
       { label: 'now',               type: 'generic',  position: 0 },
       { label: 'projects',          type: 'projects', position: 1 },
       { label: 'notes',             type: 'notes',    position: 2 },
-      { label: 'links & bookmarks', type: 'generic',  position: 3 },
+      { label: 'files',             type: 'files',    position: 3 },
+      { label: 'links & bookmarks', type: 'generic',  position: 4 },
     ];
     for (const d of defaults) {
       const created = await dbInsertSection(userId, d.label, d.type, d.position);
@@ -212,9 +215,58 @@ function exportData() {
   a.click();
 }
 
-function importData(event) {
+async function importData(event) {
+  const file = event.target.files[0];
   event.target.value = '';
-  alert('Import via JSON is not supported with Supabase backend.\nUse the dashboard UI to add sections and cards.');
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.sections || !data.cards) throw new Error('Invalid dashboard JSON.');
+
+    const mode = confirm('Import will add sections/cards from the JSON. Press OK to continue.') ;
+    if (!mode) return;
+
+    const idMap = new Map();
+
+    for (const s of data.sections) {
+      const created = await dbInsertSection(
+        state.user.id,
+        s.label || 'imported',
+        ['generic', 'projects', 'notes', 'files'].includes(s.type) ? s.type : 'generic',
+        state.sections.length
+      );
+      state.sections.push(created);
+      state.cards[created.id] = [];
+      idMap.set(s.id, created.id);
+
+      const sourceCards = data.cards[s.id] || [];
+      for (const [i, c] of sourceCards.entries()) {
+        const fields = {
+          name: c.name || 'imported card',
+          desc: c.desc || c.description || '',
+          url: c.url || '',
+          icon: c.icon || '',
+          color: c.color || 'ic-teal',
+          visibility: c.visibility || null,
+          progress: c.progress || null,
+          linkedNoteId: null,
+          content: c.content || '',
+        };
+        const row = await dbInsertCard(state.user.id, created.id, fields, i);
+        state.cards[created.id].push(mapCard(row));
+      }
+    }
+
+    state.activeSection = state.sections[0]?.id || null;
+    renderSidebar();
+    renderMain();
+    alert('Import complete.');
+  } catch (e) {
+    console.error(e);
+    alert('Import failed: ' + (e.message || e));
+  }
 }
 
 async function resetData() {
@@ -258,6 +310,15 @@ function renderSidebar() {
   state.sections.forEach((s, idx) => {
     const row = document.createElement('div');
     row.className = 'nav-item-row';
+    row.draggable = true;
+    row.dataset.sectionId = s.id;
+    row.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', s.id));
+    row.addEventListener('dragover', e => e.preventDefault());
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      const fromId = e.dataTransfer.getData('text/plain');
+      if (fromId && fromId !== s.id) moveSectionTo(fromId, s.id);
+    });
 
     const btn = document.createElement('button');
     btn.className = 'nav-item' + (s.id === state.activeSection ? ' active' : '');
@@ -281,7 +342,7 @@ function renderSidebar() {
 }
 
 function sectionIcon(type) {
-  return { generic: '◈', projects: '⬡', notes: '▤' }[type] || '◈';
+  return { generic: '◈', projects: '⬡', notes: '▤', files: '▣' }[type] || '◈';
 }
 
 function switchSection(sectionId) {
@@ -333,6 +394,7 @@ async function removeSection(sectionId) {
 function renderMain() {
   const section = state.sections.find(s => s.id === state.activeSection);
   document.getElementById('main-title').textContent = section ? section.label : '—';
+  renderToolbar(section);
   if (section) renderGrid(section.id);
   else document.getElementById('main-grid').innerHTML = '';
 }
@@ -342,66 +404,256 @@ function renderGrid(sectionId) {
   const grid    = document.getElementById('main-grid');
   if (!grid || !section) return;
 
-  const items = state.cards[sectionId] || [];
+  const allItems = state.cards[sectionId] || [];
+  const items = getFilteredItems(allItems, section);
   grid.innerHTML = '';
 
+  grid.appendChild(renderStats(section, allItems, items));
+
   if (items.length === 0) {
-    grid.innerHTML = `<div class="empty-state">no items yet — hit "+ add" to get started</div>`;
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = allItems.length === 0 ? 'no items yet — hit "+ add" to get started' : 'no matches';
+    grid.appendChild(empty);
     return;
   }
 
-  items.forEach((item, idx) => {
+  items.forEach((item) => {
+    const idx = allItems.findIndex(c => c.id === item.id);
     const isNote = section.type === 'notes';
+    const isFile = isFileCard(item) || section.type === 'files';
     const card   = document.createElement('div');
-    card.className = 'card' + (!isNote && item.url ? ' card-link' : '');
+    card.className = 'card' + (!isNote && (item.url || isFile) ? ' card-link' : '');
+    card.draggable = true;
+    card.dataset.cardId = item.id;
+
+    card.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', item.id);
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', e => e.preventDefault());
+    card.addEventListener('drop', async e => {
+      e.preventDefault();
+      const fromId = e.dataTransfer.getData('text/plain');
+      if (fromId && fromId !== item.id) await moveCardTo(sectionId, fromId, item.id);
+    });
 
     if (isNote) {
-      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openNoteModal(sectionId, item.id); };
+      card.onclick = e => {
+        if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openNoteModal(sectionId, item.id);
+      };
       card.style.cursor = 'pointer';
+    } else if (isFile) {
+      card.onclick = e => {
+        if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openStoredFile(item);
+      };
     } else if (item.url) {
-      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) window.open(item.url, '_blank'); };
+      card.onclick = e => {
+        if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) window.open(item.url, '_blank', 'noopener,noreferrer');
+      };
     }
 
-    /* tags */
     const tags = [];
     if (section.type === 'projects') {
-      if (item.visibility) tags.push(`<span class="tag tag-${item.visibility}">${item.visibility}</span>`);
+      if (item.visibility) tags.push(`<span class="tag tag-${escapeHtml(item.visibility)}">${escapeHtml(item.visibility)}</span>`);
       if (item.progress) {
         const wip = item.progress === 'in-progress';
         tags.push(`<span class="tag-progress"><span class="progress-dot ${wip ? 'dot-inprogress' : 'dot-done'}"></span>${wip ? 'in progress' : 'done'}</span>`);
       }
     }
+    if (isFile) {
+      const meta = getFileMeta(item);
+      if (meta?.size) tags.push(`<span class="tag-progress">${formatBytes(meta.size)}</span>`);
+      tags.push(`<span class="tag tag-personal">file</span>`);
+    }
     if (!isNote && item.linkedNoteId) {
       const note = findNoteById(item.linkedNoteId);
-      if (note) tags.push(`<button class="tag-note-link" onclick="openNoteFromTag(event,'${item.linkedNoteId}')">📝 ${note.name}</button>`);
+      if (note) tags.push(`<button class="tag-note-link" onclick="openNoteFromTag(event,'${item.linkedNoteId}')">📝 ${escapeHtml(note.name)}</button>`);
     }
     const tagHtml = tags.length ? `<div class="tag-row">${tags.join('')}</div>` : '';
 
-    /* reorder buttons */
     const canUp   = idx > 0;
-    const canDown = idx < items.length - 1;
+    const canDown = idx < allItems.length - 1;
     const reorderHtml = `
       <div class="card-reorder">
         ${canUp   ? `<button class="card-btn" title="move left"  onclick="moveCardUp('${sectionId}','${item.id}')">←</button>` : ''}
         ${canDown ? `<button class="card-btn" title="move right" onclick="moveCardDown('${sectionId}','${item.id}')">→</button>` : ''}
       </div>`;
 
+    const actions = isFile ? `
+        <button class="card-btn" title="open file" onclick="event.stopPropagation(); openStoredFileById('${sectionId}','${item.id}')">↗</button>
+        <button class="card-btn" title="download file" onclick="event.stopPropagation(); downloadStoredFileById('${sectionId}','${item.id}')">↓</button>
+      ` : '';
+
     card.innerHTML = `
       <div class="card-actions">
-        <button class="card-btn" title="edit"   onclick="openEditCard('${sectionId}','${item.id}')">✎</button>
-        <button class="card-btn" title="delete" onclick="deleteCard('${sectionId}','${item.id}')">×</button>
+        ${actions}
+        <button class="card-btn" title="edit"   onclick="event.stopPropagation(); openEditCard('${sectionId}','${item.id}')">✎</button>
+        <button class="card-btn" title="delete" onclick="event.stopPropagation(); deleteCard('${sectionId}','${item.id}')">×</button>
       </div>
-      <div class="card-icon ${item.color}">${item.icon || FALLBACK_ICONS[item.color] || '🔗'}</div>
-      <div class="card-name">${item.name}</div>
-      ${item.desc ? `<div class="card-desc">${item.desc}</div>` : ''}
-      ${isNote ? `<div class="card-note-hint">tap to open</div>` : ''}
-      ${!isNote && item.url ? `<div class="card-url">${item.url.replace(/^https?:\/\//, '')}</div>` : ''}
+      <div class="card-icon ${escapeHtml(item.color || 'ic-teal')}">${escapeHtml(item.icon || FALLBACK_ICONS[item.color] || (isFile ? '📎' : '🔗'))}</div>
+      <div class="card-name">${highlightMatch(item.name)}</div>
+      ${item.desc ? `<div class="card-desc">${highlightMatch(item.desc)}</div>` : ''}
+      ${isNote ? `<div class="card-note-hint">tap to open · ${wordCount(item.content)} words</div>` : ''}
+      ${!isNote && item.url ? `<div class="card-url">${highlightMatch(item.url.replace(/^https?:\/\//, ''))}</div>` : ''}
+      ${isFile ? `<div class="card-url">${escapeHtml(getFileMeta(item)?.path || 'stored in Supabase')}</div>` : ''}
       ${tagHtml}
       ${reorderHtml}
     `;
     grid.appendChild(card);
   });
 }
+
+
+function renderToolbar(section) {
+  const actions = document.querySelector('.main-actions');
+  if (!actions) return;
+  let search = document.getElementById('search-input');
+  let filter = document.getElementById('filter-select');
+  let upload = document.getElementById('btn-upload-file');
+
+  if (!search) {
+    search = document.createElement('input');
+    search.id = 'search-input';
+    search.className = 'search-input';
+    search.placeholder = 'search…';
+    search.oninput = () => { state.search = search.value; renderMain(); };
+    actions.insertBefore(search, actions.firstChild);
+  }
+  search.value = state.search || '';
+
+  if (!filter) {
+    filter = document.createElement('select');
+    filter.id = 'filter-select';
+    filter.className = 'filter-select';
+    filter.onchange = () => { state.filter = filter.value; renderMain(); };
+    actions.insertBefore(filter, document.getElementById('btn-add-card'));
+  }
+  filter.innerHTML = `
+    <option value="all">all</option>
+    <option value="links">links</option>
+    <option value="files">files</option>
+    <option value="done">done</option>
+    <option value="wip">in progress</option>
+    <option value="public">public</option>
+  `;
+  filter.value = state.filter || 'all';
+
+  if (!upload) {
+    upload = document.createElement('button');
+    upload.id = 'btn-upload-file';
+    upload.className = 'btn-add';
+    upload.textContent = '↑ file';
+    upload.onclick = openFileUploadModal;
+    actions.insertBefore(upload, document.getElementById('btn-add-card'));
+  }
+
+  upload.style.display = section && section.type === 'files' ? 'inline-flex' : 'none';
+  document.getElementById('btn-add-card').style.display = section && section.type === 'files' ? 'none' : 'inline-flex';
+}
+
+function getFilteredItems(items, section) {
+  const q = (state.search || '').trim().toLowerCase();
+  return items.filter(item => {
+    const meta = getFileMeta(item);
+    const text = [
+      item.name, item.desc, item.url, item.content,
+      item.visibility, item.progress, meta?.path, meta?.type
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (q && !text.includes(q)) return false;
+
+    switch (state.filter) {
+      case 'links': return !!item.url && !isFileCard(item);
+      case 'files': return isFileCard(item) || section.type === 'files';
+      case 'done': return item.progress === 'done';
+      case 'wip': return item.progress === 'in-progress';
+      case 'public': return item.visibility === 'public';
+      default: return true;
+    }
+  });
+}
+
+function renderStats(section, allItems, visibleItems) {
+  const wrap = document.createElement('div');
+  wrap.className = 'stats-row';
+  const allCards = Object.values(state.cards).flat();
+  const projects = allCards.filter(c => c.progress);
+  const done = projects.filter(c => c.progress === 'done').length;
+  const notes = state.sections.filter(s => s.type === 'notes').reduce((n, s) => n + (state.cards[s.id] || []).length, 0);
+  const files = allCards.filter(isFileCard).length;
+  wrap.innerHTML = `
+    <div class="stat-pill"><strong>${allItems.length}</strong><span>in section</span></div>
+    <div class="stat-pill"><strong>${visibleItems.length}</strong><span>shown</span></div>
+    <div class="stat-pill"><strong>${done}/${projects.length}</strong><span>projects done</span></div>
+    <div class="stat-pill"><strong>${notes}</strong><span>notes</span></div>
+    <div class="stat-pill"><strong>${files}</strong><span>files</span></div>
+  `;
+  return wrap;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function highlightMatch(value) {
+  const safe = escapeHtml(value ?? '');
+  const q = (state.search || '').trim();
+  if (!q) return safe;
+  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safe.replace(new RegExp(`(${escapedQ})`, 'ig'), '<mark>$1</mark>');
+}
+
+function wordCount(text) {
+  return (text || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+function getFileMeta(card) {
+  try {
+    const meta = JSON.parse(card.content || '{}');
+    return meta && meta.kind === 'supabase-file' ? meta : null;
+  } catch {
+    return null;
+  }
+}
+
+function isFileCard(card) {
+  return !!getFileMeta(card);
+}
+
+function formatBytes(bytes) {
+  const n = Number(bytes || 0);
+  if (!n) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+  return `${(n / Math.pow(1024, i)).toFixed(i ? 1 : 0)} ${units[i]}`;
+}
+
+async function moveCardTo(sectionId, fromId, toId) {
+  const cards = state.cards[sectionId] || [];
+  const from = cards.findIndex(c => c.id === fromId);
+  const to = cards.findIndex(c => c.id === toId);
+  if (from < 0 || to < 0 || from === to) return;
+  const [moved] = cards.splice(from, 1);
+  cards.splice(to, 0, moved);
+  await persistCardOrder(sectionId);
+  renderGrid(sectionId);
+}
+
+async function moveSectionTo(fromId, toId) {
+  const from = state.sections.findIndex(s => s.id === fromId);
+  const to = state.sections.findIndex(s => s.id === toId);
+  if (from < 0 || to < 0 || from === to) return;
+  const [moved] = state.sections.splice(from, 1);
+  state.sections.splice(to, 0, moved);
+  await persistSectionOrder();
+  renderSidebar();
+  renderMain();
+}
+
 
 function findNoteById(noteId) {
   for (const s of state.sections) {
@@ -484,10 +736,11 @@ function clearCardFields() {
 function toggleCardFields(type) {
   const isProjects = type === 'projects';
   const isNotes    = type === 'notes';
+  const isFiles    = type === 'files';
   document.getElementById('f-visibility-wrap').style.display = isProjects ? 'flex' : 'none';
   document.getElementById('f-progress-wrap').style.display   = isProjects ? 'flex' : 'none';
-  document.getElementById('f-url-wrap').style.display        = isNotes    ? 'none' : 'flex';
-  document.getElementById('f-note-wrap').style.display       = isNotes    ? 'none' : 'flex';
+  document.getElementById('f-url-wrap').style.display        = (isNotes || isFiles) ? 'none' : 'flex';
+  document.getElementById('f-note-wrap').style.display       = (isNotes || isFiles) ? 'none' : 'flex';
 }
 
 function populateLinkedNoteSelect(selectedId) {
@@ -514,6 +767,7 @@ async function saveCard() {
   const section = state.sections.find(s => s.id === state.activeSection);
   if (!section) return;
   const isNotes = section.type === 'notes';
+  if (section.type === 'files') { openFileUploadModal(); return; }
 
   const fields = {
     name,
@@ -545,7 +799,12 @@ async function saveCard() {
 }
 
 async function deleteCard(sectionId, cardId) {
+  const card = (state.cards[sectionId] || []).find(c => c.id === cardId);
   if (!confirm('Delete this card?')) return;
+  const meta = card ? getFileMeta(card) : null;
+  if (meta?.path) {
+    try { await dbDeleteDashboardFile(meta.path); } catch (e) { console.warn('File delete failed:', e); }
+  }
   await dbDeleteCard(cardId);
   state.cards[sectionId] = (state.cards[sectionId] || []).filter(c => c.id !== cardId);
   renderGrid(sectionId);
@@ -554,6 +813,42 @@ async function deleteCard(sectionId, cardId) {
 /* ═══════════════════════════════════════════════════════════
    NOTE EDITOR MODAL
    ═══════════════════════════════════════════════════════════ */
+
+function markdownToHtml(md) {
+  let html = escapeHtml(md || '');
+  html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>')
+             .replace(/^## (.*)$/gm, '<h2>$1</h2>')
+             .replace(/^# (.*)$/gm, '<h1>$1</h1>')
+             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+             .replace(/\*(.*?)\*/g, '<em>$1</em>')
+             .replace(/`([^`]+)`/g, '<code>$1</code>')
+             .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+             .replace(/\n/g, '<br>');
+  return html;
+}
+
+function updateNotePreview() {
+  const preview = document.getElementById('fn-preview');
+  const content = document.getElementById('fn-content');
+  if (preview && content) preview.innerHTML = markdownToHtml(content.value);
+}
+
+function updateNoteStatus(text) {
+  const el = document.getElementById('fn-status');
+  if (el) el.textContent = text;
+}
+
+let noteAutosaveTimer = null;
+function scheduleNoteAutosave() {
+  updateNotePreview();
+  updateNoteStatus('editing…');
+  clearTimeout(noteAutosaveTimer);
+  noteAutosaveTimer = setTimeout(async () => {
+    if (!editingNoteId || !activeNoteSection) return;
+    await saveNote(false);
+  }, 1200);
+}
+
 function openNoteModal(sectionId, noteId) {
   const note = (state.cards[sectionId] || []).find(c => c.id === noteId);
   if (!note) return;
@@ -562,6 +857,8 @@ function openNoteModal(sectionId, noteId) {
   document.getElementById('modal-note-title').textContent = note.name || 'note';
   document.getElementById('fn-name').value    = note.name    || '';
   document.getElementById('fn-content').value = note.content || '';
+  updateNotePreview();
+  updateNoteStatus('loaded');
   document.getElementById('fn-color').value   = note.color   || 'ic-teal';
   document.getElementById('fn-icon').value    = note.icon    || '';
   document.getElementById('modal-note').classList.add('open');
@@ -573,7 +870,7 @@ function closeNoteModal() {
   editingNoteId = null;
 }
 
-async function saveNote() {
+async function saveNote(closeAfterSave = true) {
   const idx = (state.cards[activeNoteSection] || []).findIndex(c => c.id === editingNoteId);
   if (idx === -1) return;
   const updated = {
@@ -586,7 +883,8 @@ async function saveNote() {
   await dbUpdateCard(editingNoteId, updated);
   state.cards[activeNoteSection][idx] = updated;
   renderGrid(activeNoteSection);
-  closeNoteModal();
+  updateNoteStatus('saved');
+  if (closeAfterSave) closeNoteModal();
 }
 
 function openNoteFromTag(event, noteId) {
@@ -625,19 +923,120 @@ async function saveSection() {
   closeSectionModal();
 }
 
+
+/* ═══════════════════════════════════════════════════════════
+   SUPABASE FILE UPLOADS
+   ═══════════════════════════════════════════════════════════ */
+function openFileUploadModal() {
+  const section = state.sections.find(s => s.id === state.activeSection);
+  if (!section || section.type !== 'files') {
+    alert('Create or open a section with type "files" first.');
+    return;
+  }
+  document.getElementById('fu-file').value = '';
+  document.getElementById('fu-title').value = '';
+  document.getElementById('fu-desc').value = '';
+  document.getElementById('fu-status').textContent = '';
+  document.getElementById('modal-file-upload').classList.add('open');
+}
+
+function closeFileUploadModal() {
+  document.getElementById('modal-file-upload').classList.remove('open');
+}
+
+async function saveUploadedFile() {
+  const file = document.getElementById('fu-file').files[0];
+  if (!file) { alert('Choose a file first.'); return; }
+  const section = state.sections.find(s => s.id === state.activeSection);
+  if (!section || section.type !== 'files') return;
+
+  const status = document.getElementById('fu-status');
+  try {
+    status.textContent = 'uploading…';
+    const uploaded = await dbUploadDashboardFile(state.user.id, file);
+
+    const fields = {
+      name: document.getElementById('fu-title').value.trim() || file.name,
+      desc: document.getElementById('fu-desc').value.trim(),
+      url: '',
+      icon: iconForUploadedFile(file.name),
+      color: 'ic-blue',
+      visibility: null,
+      progress: null,
+      linkedNoteId: null,
+      content: JSON.stringify({
+        kind: 'supabase-file',
+        bucket: uploaded.bucket,
+        path: uploaded.path,
+        size: file.size,
+        type: file.type,
+        originalName: file.name,
+        uploadedAt: new Date().toISOString()
+      })
+    };
+
+    const pos = (state.cards[state.activeSection] || []).length;
+    const row = await dbInsertCard(state.user.id, state.activeSection, fields, pos);
+    if (!state.cards[state.activeSection]) state.cards[state.activeSection] = [];
+    state.cards[state.activeSection].push(mapCard(row));
+
+    renderGrid(state.activeSection);
+    closeFileUploadModal();
+  } catch (e) {
+    console.error(e);
+    status.textContent = 'error: ' + (e.message || e);
+    alert('Upload failed: ' + (e.message || e));
+  }
+}
+
+function iconForUploadedFile(name) {
+  const n = (name || '').toLowerCase();
+  if (n.endsWith('.pdf')) return '📄';
+  if (n.endsWith('.doc') || n.endsWith('.docx')) return '📝';
+  if (n.endsWith('.ppt') || n.endsWith('.pptx')) return '📊';
+  if (n.endsWith('.xls') || n.endsWith('.xlsx')) return '📈';
+  if (/\.(png|jpe?g|gif|webp|svg)$/.test(n)) return '🖼️';
+  if (/\.(zip|rar|7z)$/.test(n)) return '🗜️';
+  return '📎';
+}
+
+async function openStoredFile(card) {
+  const meta = getFileMeta(card);
+  if (!meta) return;
+  const url = await dbCreateFileSignedUrl(meta.path, false);
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+async function downloadStoredFile(card) {
+  const meta = getFileMeta(card);
+  if (!meta) return;
+  const url = await dbCreateFileSignedUrl(meta.path, meta.originalName || card.name || true);
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function openStoredFileById(sectionId, cardId) {
+  const card = (state.cards[sectionId] || []).find(c => c.id === cardId);
+  if (card) openStoredFile(card);
+}
+
+function downloadStoredFileById(sectionId, cardId) {
+  const card = (state.cards[sectionId] || []).find(c => c.id === cardId);
+  if (card) downloadStoredFile(card);
+}
+
 /* ═══════════════════════════════════════════════════════════
    GLOBAL EVENTS
    ═══════════════════════════════════════════════════════════ */
-['modal-card','modal-note','modal-section','modal-settings'].forEach(id => {
+['modal-card','modal-note','modal-section','modal-settings','modal-file-upload'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener('click', e => {
-    if (e.target === el) { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
+    if (e.target === el) { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); closeFileUploadModal(); }
   });
 });
 
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
+  if (e.key === 'Escape') { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); closeFileUploadModal(); }
 });
 
 document.getElementById('l-password').addEventListener('keydown', e => {
@@ -645,72 +1044,6 @@ document.getElementById('l-password').addEventListener('keydown', e => {
 });
 
 /* ─── init ────────────────────────────────────────────────── */
-function escapeAttr(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
-function getGoogleDriveFileId(url) {
-  if (!url) return null;
-
-  const patterns = [
-    /\/file\/d\/([^/]+)/,
-    /[?&]id=([^&]+)/,
-    /\/document\/d\/([^/]+)/,
-    /\/presentation\/d\/([^/]+)/,
-    /\/spreadsheets\/d\/([^/]+)/
-  ];
-
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match && match[1]) return match[1];
-  }
-
-  return null;
-}
-
-function getDownloadUrl(url) {
-  const fileId = getGoogleDriveFileId(url);
-  if (!fileId) return url;
-
-  if (url.includes('/document/')) {
-    return `https://docs.google.com/document/d/${fileId}/export?format=pdf`;
-  }
-
-  if (url.includes('/presentation/')) {
-    return `https://docs.google.com/presentation/d/${fileId}/export/pdf`;
-  }
-
-  if (url.includes('/spreadsheets/')) {
-    return `https://docs.google.com/spreadsheets/d/${fileId}/export?format=xlsx`;
-  }
-
-  return `https://drive.google.com/uc?export=download&id=${fileId}`;
-}
-
-function openCardUrl(url) {
-  if (!url) return;
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-async function copyCardUrl(url) {
-  if (!url) return;
-
-  try {
-    await navigator.clipboard.writeText(url);
-    alert('link copied');
-  } catch (e) {
-    prompt('copy this link:', url);
-  }
-}
-
-function downloadCardUrl(url) {
-  if (!url) return;
-  window.open(getDownloadUrl(url), '_blank', 'noopener,noreferrer');
-}
 
 boot();
