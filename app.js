@@ -149,7 +149,7 @@ function openSettings() {
   document.getElementById('s-name').value    = state.settings.siteName;
   document.getElementById('s-tagline').value = state.settings.tagline;
   renderSettingsSections();
-  updateGoogleDriveStatus();
+  renderDriveSettingsPanel();
   document.getElementById('modal-settings').classList.add('open');
 }
 
@@ -334,6 +334,7 @@ async function removeSection(sectionId) {
 function renderMain() {
   const section = state.sections.find(s => s.id === state.activeSection);
   document.getElementById('main-title').textContent = section ? section.label : '—';
+  renderHeaderDriveUploadButton(section);
   if (section) renderGrid(section.id);
   else document.getElementById('main-grid').innerHTML = '';
 }
@@ -360,7 +361,7 @@ function renderGrid(sectionId) {
       card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openNoteModal(sectionId, item.id); };
       card.style.cursor = 'pointer';
     } else if (item.url) {
-      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder') && !e.target.closest('.card-link-actions')) openCardUrl(item.url); };
+      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openCardUrl(item.url); };
     }
 
     /* tags */
@@ -387,25 +388,21 @@ function renderGrid(sectionId) {
         ${canDown ? `<button class="card-btn" title="move right" onclick="moveCardDown('${sectionId}','${item.id}')">→</button>` : ''}
       </div>`;
 
-    const safeUrl = escapeAttr(item.url || '');
-
     card.innerHTML = `
       <div class="card-actions">
+        ${!isNote && item.url ? `
+          <button class="card-btn" title="open" onclick="event.stopPropagation(); openCardUrl('${escapeAttr(item.url || '')}')">↗</button>
+          <button class="card-btn" title="copy link" onclick="event.stopPropagation(); copyCardUrl('${escapeAttr(item.url || '')}')">⧉</button>
+          <button class="card-btn" title="download" onclick="event.stopPropagation(); downloadCardUrl('${escapeAttr(item.url || '')}')">↓</button>
+        ` : ''}
         <button class="card-btn" title="edit" onclick="event.stopPropagation(); openEditCard('${sectionId}','${item.id}')">✎</button>
         <button class="card-btn" title="delete" onclick="event.stopPropagation(); deleteCard('${sectionId}','${item.id}')">×</button>
       </div>
       <div class="card-icon ${item.color}">${item.icon || FALLBACK_ICONS[item.color] || '🔗'}</div>
-      <div class="card-name">${escapeAttr(item.name)}</div>
-      ${item.desc ? `<div class="card-desc">${escapeAttr(item.desc)}</div>` : ''}
+      <div class="card-name">${item.name}</div>
+      ${item.desc ? `<div class="card-desc">${item.desc}</div>` : ''}
       ${isNote ? `<div class="card-note-hint">tap to open</div>` : ''}
-      ${!isNote && item.url ? `
-        <div class="card-url">${escapeAttr(item.url.replace(/^https?:\/\//, ''))}</div>
-        <div class="card-link-actions">
-          <button class="card-link-btn" type="button" onclick="event.stopPropagation(); openCardUrl('${safeUrl}')">↗ open</button>
-          <button class="card-link-btn" type="button" onclick="event.stopPropagation(); copyCardUrl('${safeUrl}')">⧉ copy</button>
-          <button class="card-link-btn" type="button" onclick="event.stopPropagation(); downloadCardUrl('${safeUrl}')">↓ download</button>
-        </div>
-      ` : ''}
+      ${!isNote && item.url ? `<div class="card-url">${item.url.replace(/^https?:\/\//, '')}</div>` : ''}
       ${tagHtml}
       ${reorderHtml}
     `;
@@ -638,199 +635,21 @@ async function saveSection() {
 /* ═══════════════════════════════════════════════════════════
    GLOBAL EVENTS
    ═══════════════════════════════════════════════════════════ */
-['modal-card','modal-drive-upload','modal-note','modal-section','modal-settings'].forEach(id => {
+['modal-card','modal-note','modal-section','modal-settings'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener('click', e => {
-    if (e.target === el) { closeCardModal(); closeDriveUploadModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
+    if (e.target === el) { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
   });
 });
 
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeCardModal(); closeDriveUploadModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
+  if (e.key === 'Escape') { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
 });
 
 document.getElementById('l-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
-
-
-
-/* ═══════════════════════════════════════════════════════════
-   GOOGLE DRIVE UPLOAD
-   ═══════════════════════════════════════════════════════════ */
-let googleDriveTokenClient = null;
-let googleDriveAccessToken = null;
-let googleDriveTokenExpiresAt = 0;
-
-function currentSectionAllowsUpload() {
-  const section = state.sections.find(s => s.id === state.activeSection);
-  return section && section.type !== 'notes';
-}
-
-
-
-
-
-
-
-
-
-
-
-function setDriveUploadStatus(message, isError = false) {
-  const el = document.getElementById('drive-upload-status');
-  if (!el) return;
-  el.textContent = message || '';
-  el.className = 'upload-status' + (isError ? ' error' : '');
-}
-
-function getDriveToken(forceConsent = false) {
-  return new Promise((resolve, reject) => {
-    if (googleDriveAccessToken && Date.now() < googleDriveTokenExpiresAt - 60000 && !forceConsent) {
-      resolve(googleDriveAccessToken);
-      return;
-    }
-
-    if (!window.GOOGLE_CLIENT_ID) {
-      reject(new Error('Missing GOOGLE_CLIENT_ID in config.js'));
-      return;
-    }
-
-    if (!window.google || !google.accounts || !google.accounts.oauth2) {
-      reject(new Error('Google login library is not loaded yet. Refresh and try again.'));
-      return;
-    }
-
-    googleDriveTokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: window.GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      callback: response => {
-        if (response.error) {
-          reject(new Error(response.error_description || response.error));
-          return;
-        }
-
-        googleDriveAccessToken = response.access_token;
-        googleDriveTokenExpiresAt = Date.now() + ((response.expires_in || 3600) * 1000);
-        localStorage.setItem('googleDriveConnectedOnce', 'true');
-        updateGoogleDriveStatus();
-        resolve(googleDriveAccessToken);
-      },
-    });
-
-    const hasConnectedBefore = localStorage.getItem('googleDriveConnectedOnce') === 'true';
-    googleDriveTokenClient.requestAccessToken({
-      prompt: forceConsent || !hasConnectedBefore ? 'consent select_account' : '',
-    });
-  });
-}
-
-async function uploadFileToGoogleDrive(file, token) {
-  const metadata = { name: file.name, mimeType: file.type || 'application/octet-stream' };
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('file', file);
-
-  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      googleDriveAccessToken = null;
-      googleDriveTokenExpiresAt = 0;
-      updateGoogleDriveStatus();
-      throw new Error('Google Drive permission expired. Click upload again and reconnect.');
-    }
-    throw new Error(data?.error?.message || 'Google Drive upload failed.');
-  }
-
-  // Try to make the file viewable by link, so cards open/download from any browser.
-  try {
-    await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role: 'reader', type: 'anyone' }),
-    });
-  } catch (e) {
-    console.warn('Could not set link permission:', e);
-  }
-
-  return data;
-}
-
-function iconForFile(file) {
-  const name = (file.name || '').toLowerCase();
-  const type = file.type || '';
-  if (type.includes('image') || /\.(png|jpg|jpeg|gif|webp|svg)$/.test(name)) return '🖼️';
-  if (type.includes('pdf') || name.endsWith('.pdf')) return '📄';
-  if (/\.(doc|docx)$/.test(name)) return '📝';
-  if (/\.(ppt|pptx)$/.test(name)) return '📊';
-  if (/\.(xls|xlsx|csv)$/.test(name)) return '📈';
-  if (/\.(zip|rar|7z)$/.test(name)) return '🗜️';
-  return '📎';
-}
-
-async function uploadSelectedFileToDrive() {
-  const fileInput = document.getElementById('drive-file');
-  const uploadBtn = document.getElementById('drive-upload-btn');
-  const file = fileInput?.files?.[0];
-
-  if (!file) {
-    setDriveUploadStatus('Choose a file first.', true);
-    return;
-  }
-  if (!currentSectionAllowsUpload()) {
-    setDriveUploadStatus('Switch to a normal/cards section first.', true);
-    return;
-  }
-
-  try {
-    uploadBtn.disabled = true;
-    setDriveUploadStatus('Connecting to Google Drive...');
-    const token = await getDriveToken(false);
-
-    setDriveUploadStatus('Uploading to Google Drive...');
-    const uploaded = await uploadFileToGoogleDrive(file, token);
-
-    setDriveUploadStatus('Saving card in dashboard...');
-    const title = document.getElementById('drive-title').value.trim() || uploaded.name || file.name;
-    const desc = document.getElementById('drive-desc').value.trim() || `${Math.ceil(file.size / 1024)} KB · Google Drive`;
-    const pos = (state.cards[state.activeSection] || []).length;
-    const section = state.sections.find(s => s.id === state.activeSection);
-    const fields = {
-      name: title,
-      desc,
-      url: uploaded.webViewLink || `https://drive.google.com/file/d/${uploaded.id}/view`,
-      icon: iconForFile(file),
-      color: 'ic-blue',
-      visibility: section?.type === 'projects' ? 'personal' : null,
-      progress: section?.type === 'projects' ? 'in-progress' : null,
-      linkedNoteId: null,
-      content: '',
-    };
-
-    const row = await dbInsertCard(state.user.id, state.activeSection, fields, pos);
-    if (!state.cards[state.activeSection]) state.cards[state.activeSection] = [];
-    state.cards[state.activeSection].push(mapCard(row));
-
-    renderGrid(state.activeSection);
-    closeDriveUploadModal();
-  } catch (err) {
-    console.error(err);
-    setDriveUploadStatus(err.message || 'Upload failed.', true);
-  } finally {
-    uploadBtn.disabled = false;
-    updateGoogleDriveStatus();
-  }
-}
 
 /* ─── init ────────────────────────────────────────────────── */
 function escapeAttr(value) {
@@ -902,8 +721,8 @@ function downloadCardUrl(url) {
 }
 
 
-/* GOOGLE DRIVE CLEAN PATCH START */
-const DriveUpload = {
+/* google drive upload */
+const driveState = {
   accessToken: null,
   expiresAt: 0
 };
@@ -912,20 +731,57 @@ function getGoogleClientId() {
   return window.GOOGLE_CLIENT_ID || (typeof GOOGLE_CLIENT_ID !== 'undefined' ? GOOGLE_CLIENT_ID : '');
 }
 
-function driveIsConnected() {
-  return !!DriveUpload.accessToken && Date.now() < DriveUpload.expiresAt - 60000;
+function driveConnected() {
+  return !!driveState.accessToken && Date.now() < driveState.expiresAt - 60000;
 }
 
-function driveStatusLabel() {
-  return driveIsConnected() ? 'connected' : 'not connected';
+function renderHeaderDriveUploadButton(section) {
+  const title = document.getElementById('main-title');
+  if (!title) return;
+
+  const old = document.getElementById('drive-upload-header-btn');
+  if (old) old.remove();
+
+  if (!section || section.type === 'notes') return;
+
+  const btn = document.createElement('button');
+  btn.id = 'drive-upload-header-btn';
+  btn.className = 'btn-secondary drive-upload-header-btn';
+  btn.type = 'button';
+  btn.textContent = '↑ upload';
+  btn.onclick = openDriveUploadModal;
+
+  title.insertAdjacentElement('afterend', btn);
 }
 
-function updateDriveStatusUi() {
-  const el = document.getElementById('drive-settings-status');
-  if (el) el.textContent = driveStatusLabel();
+function renderDriveSettingsPanel() {
+  const list = document.getElementById('settings-sections-list');
+  if (!list) return;
+
+  let panel = document.getElementById('drive-settings-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'drive-settings-panel';
+    panel.className = 'drive-settings-panel';
+    list.insertAdjacentElement('afterend', panel);
+  }
+
+  panel.innerHTML = `
+    <div class="drive-settings-title">Google Drive</div>
+    <div class="drive-settings-status">status: <strong>${driveConnected() ? 'connected' : 'not connected'}</strong></div>
+    <div class="drive-settings-actions">
+      <button type="button" class="btn-secondary" onclick="connectGoogleDrive()">connect / reconnect</button>
+      <button type="button" class="btn-secondary" onclick="disconnectGoogleDrive()">disconnect</button>
+    </div>
+    <div class="drive-settings-note">Another browser or PC needs connect once again.</div>
+  `;
 }
 
-function requestDriveToken(forceConsent = false) {
+function updateDriveSettingsPanel() {
+  if (document.getElementById('drive-settings-panel')) renderDriveSettingsPanel();
+}
+
+function requestGoogleDriveToken(forceConsent) {
   return new Promise((resolve, reject) => {
     const clientId = getGoogleClientId();
     if (!clientId) {
@@ -933,8 +789,8 @@ function requestDriveToken(forceConsent = false) {
       return;
     }
 
-    if (!window.google?.accounts?.oauth2) {
-      reject(new Error('Google script not loaded. Refresh the page and try again.'));
+    if (!window.google || !google.accounts || !google.accounts.oauth2) {
+      reject(new Error('Google login is not loaded. Refresh the page and try again.'));
       return;
     }
 
@@ -948,10 +804,10 @@ function requestDriveToken(forceConsent = false) {
           return;
         }
 
-        DriveUpload.accessToken = response.access_token;
-        DriveUpload.expiresAt = Date.now() + ((response.expires_in || 3600) * 1000);
-        localStorage.setItem('driveConnectedOnce', 'true');
-        updateDriveStatusUi();
+        driveState.accessToken = response.access_token;
+        driveState.expiresAt = Date.now() + ((response.expires_in || 3600) * 1000);
+        localStorage.setItem('googleDriveConnectedOnce', 'true');
+        updateDriveSettingsPanel();
         resolve(response.access_token);
       }
     });
@@ -960,14 +816,15 @@ function requestDriveToken(forceConsent = false) {
   });
 }
 
-async function getDriveToken() {
-  if (driveIsConnected()) return DriveUpload.accessToken;
-  return requestDriveToken(localStorage.getItem('driveConnectedOnce') !== 'true');
+async function getGoogleDriveToken() {
+  if (driveConnected()) return driveState.accessToken;
+  const alreadyConnected = localStorage.getItem('googleDriveConnectedOnce') === 'true';
+  return requestGoogleDriveToken(!alreadyConnected);
 }
 
-async function connectDrive() {
+async function connectGoogleDrive() {
   try {
-    await requestDriveToken(true);
+    await requestGoogleDriveToken(true);
     alert('Google Drive connected.');
   } catch (error) {
     console.error(error);
@@ -975,132 +832,123 @@ async function connectDrive() {
   }
 }
 
-function disconnectDrive() {
-  if (DriveUpload.accessToken && window.google?.accounts?.oauth2?.revoke) {
-    google.accounts.oauth2.revoke(DriveUpload.accessToken, () => {});
+function disconnectGoogleDrive() {
+  if (driveState.accessToken && window.google?.accounts?.oauth2?.revoke) {
+    google.accounts.oauth2.revoke(driveState.accessToken, () => {});
   }
-  DriveUpload.accessToken = null;
-  DriveUpload.expiresAt = 0;
-  localStorage.removeItem('driveConnectedOnce');
-  updateDriveStatusUi();
+  driveState.accessToken = null;
+  driveState.expiresAt = 0;
+  localStorage.removeItem('googleDriveConnectedOnce');
+  updateDriveSettingsPanel();
   alert('Google Drive disconnected on this browser.');
 }
 
-function ensureDriveModal() {
-  if (document.getElementById('drive-upload-modal')) return;
+function ensureDriveUploadModal() {
+  if (document.getElementById('modal-drive-upload')) return;
 
   const modal = document.createElement('div');
-  modal.id = 'drive-upload-modal';
+  modal.id = 'modal-drive-upload';
   modal.className = 'modal';
   modal.innerHTML = `
     <div class="modal-box">
       <div class="modal-header">
         <h2>upload to Google Drive</h2>
-        <button class="modal-close" type="button" onclick="closeDriveModal()">×</button>
+        <button class="modal-close" type="button" onclick="closeDriveUploadModal()">×</button>
       </div>
 
       <div class="form-group">
         <label>file</label>
-        <input id="drive-file-input" type="file">
+        <input id="drive-file" type="file">
       </div>
 
       <div class="form-group">
         <label>title</label>
-        <input id="drive-title-input" type="text" placeholder="auto from filename">
+        <input id="drive-title" type="text" placeholder="auto from filename">
       </div>
 
       <div class="form-group">
         <label>description</label>
-        <textarea id="drive-desc-input" placeholder="optional"></textarea>
+        <textarea id="drive-desc" placeholder="optional"></textarea>
       </div>
 
-      <div id="drive-upload-message" class="drive-upload-message"></div>
+      <div id="drive-message" class="drive-message"></div>
 
       <div class="modal-actions">
-        <button class="btn-secondary" type="button" onclick="closeDriveModal()">cancel</button>
-        <button class="btn-primary" type="button" onclick="uploadSelectedFileToDrive()">upload</button>
+        <button class="btn-secondary" type="button" onclick="closeDriveUploadModal()">cancel</button>
+        <button class="btn-primary" type="button" onclick="handleGoogleDriveUpload()">upload</button>
       </div>
     </div>
   `;
 
   document.body.appendChild(modal);
 
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeDriveModal();
+  modal.addEventListener('click', e => {
+    if (e.target === modal) closeDriveUploadModal();
   });
 
-  document.getElementById('drive-file-input').addEventListener('change', (e) => {
+  document.getElementById('drive-file').addEventListener('change', e => {
     const file = e.target.files[0];
-    const title = document.getElementById('drive-title-input');
+    const title = document.getElementById('drive-title');
     if (file && !title.value.trim()) title.value = file.name;
   });
 }
 
-function openDriveModal() {
+function openDriveUploadModal() {
   const section = state.sections.find(s => s.id === state.activeSection);
   if (!section || section.type === 'notes') {
-    alert('Open a normal section or projects section first.');
+    alert('Open projects, links, or Drive before uploading.');
     return;
   }
 
-  ensureDriveModal();
-  document.getElementById('drive-file-input').value = '';
-  document.getElementById('drive-title-input').value = '';
-  document.getElementById('drive-desc-input').value = '';
-  document.getElementById('drive-upload-message').textContent = '';
-  document.getElementById('drive-upload-modal').classList.add('open');
+  ensureDriveUploadModal();
+  document.getElementById('drive-file').value = '';
+  document.getElementById('drive-title').value = '';
+  document.getElementById('drive-desc').value = '';
+  document.getElementById('drive-message').textContent = '';
+  document.getElementById('modal-drive-upload').classList.add('open');
 }
 
-function closeDriveModal() {
-  const modal = document.getElementById('drive-upload-modal');
+function closeDriveUploadModal() {
+  const modal = document.getElementById('modal-drive-upload');
   if (modal) modal.classList.remove('open');
 }
 
-function fileIcon(name) {
+function iconForUploadedFile(name) {
   const n = (name || '').toLowerCase();
   if (n.endsWith('.pdf')) return '📄';
   if (n.endsWith('.doc') || n.endsWith('.docx')) return '📝';
   if (n.endsWith('.ppt') || n.endsWith('.pptx')) return '📊';
   if (n.endsWith('.xls') || n.endsWith('.xlsx')) return '📈';
-  if (n.match(/\.(png|jpg|jpeg|gif|webp|svg)$/)) return '🖼️';
-  if (n.match(/\.(zip|rar|7z)$/)) return '🗜️';
+  if (/\.(png|jpe?g|gif|webp|svg)$/.test(n)) return '🖼️';
+  if (/\.(zip|rar|7z)$/.test(n)) return '🗜️';
   return '📎';
 }
 
-async function uploadDriveFile(file) {
-  const token = await getDriveToken();
+async function uploadFileToGoogleDrive(file) {
+  const token = await getGoogleDriveToken();
 
-  const metadata = {
-    name: file.name,
-    mimeType: file.type || 'application/octet-stream'
-  };
-
+  const metadata = { name: file.name, mimeType: file.type || 'application/octet-stream' };
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', file);
 
-  const response = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: form
-    }
-  );
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form
+  });
 
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      DriveUpload.accessToken = null;
-      DriveUpload.expiresAt = 0;
-      updateDriveStatusUi();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      driveState.accessToken = null;
+      driveState.expiresAt = 0;
+      updateDriveSettingsPanel();
     }
-    throw new Error(result?.error?.message || 'Google Drive upload failed.');
+    throw new Error(data?.error?.message || 'Google Drive upload failed.');
   }
 
-  // make file accessible by link
-  await fetch(`https://www.googleapis.com/drive/v3/files/${result.id}/permissions`, {
+  await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -1110,34 +958,39 @@ async function uploadDriveFile(file) {
   }).catch(console.warn);
 
   return {
-    id: result.id,
-    name: result.name || file.name,
-    url: result.webViewLink || `https://drive.google.com/file/d/${result.id}/view`
+    id: data.id,
+    name: data.name || file.name,
+    url: data.webViewLink || `https://drive.google.com/file/d/${data.id}/view`
   };
 }
 
-async function uploadSelectedFileToDrive() {
-  const msg = document.getElementById('drive-upload-message');
-  const file = document.getElementById('drive-file-input').files[0];
-  const title = document.getElementById('drive-title-input').value.trim();
-  const desc = document.getElementById('drive-desc-input').value.trim();
+async function handleGoogleDriveUpload() {
+  const file = document.getElementById('drive-file').files[0];
+  const title = document.getElementById('drive-title').value.trim();
+  const desc = document.getElementById('drive-desc').value.trim();
+  const msg = document.getElementById('drive-message');
 
   if (!file) {
     alert('Choose a file first.');
     return;
   }
 
+  const section = state.sections.find(s => s.id === state.activeSection);
+  if (!section) {
+    alert('No section selected.');
+    return;
+  }
+
   try {
     msg.textContent = 'Uploading to Google Drive...';
-    const uploaded = await uploadDriveFile(file);
+    const uploaded = await uploadFileToGoogleDrive(file);
 
-    msg.textContent = 'Saving dashboard card...';
-    const section = state.sections.find(s => s.id === state.activeSection);
+    msg.textContent = 'Saving card...';
     const fields = {
       name: title || uploaded.name,
       desc,
       url: uploaded.url,
-      icon: fileIcon(uploaded.name),
+      icon: iconForUploadedFile(uploaded.name),
       color: 'ic-blue',
       visibility: section.type === 'projects' ? 'personal' : null,
       progress: section.type === 'projects' ? 'in-progress' : null,
@@ -1151,7 +1004,7 @@ async function uploadSelectedFileToDrive() {
     state.cards[state.activeSection].push(mapCard(row));
 
     renderGrid(state.activeSection);
-    closeDriveModal();
+    closeDriveUploadModal();
   } catch (error) {
     console.error(error);
     msg.textContent = error.message || 'Upload failed.';
@@ -1159,75 +1012,59 @@ async function uploadSelectedFileToDrive() {
   }
 }
 
-function addSingleDriveUploadButton() {
-  // Remove duplicates from old patches.
-  document.querySelectorAll('#btn-drive-upload, .drive-upload-main-btn, .js-drive-upload-button').forEach(el => el.remove());
-
-  const addBtn = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.trim() === '+ add');
-  if (!addBtn) return;
-
-  const btn = document.createElement('button');
-  btn.id = 'drive-upload-button';
-  btn.className = addBtn.className || 'btn-secondary';
-  btn.type = 'button';
-  btn.textContent = '↑ upload';
-  btn.onclick = openDriveModal;
-
-  addBtn.parentElement.insertBefore(btn, addBtn);
+function escapeAttr(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
-function addDriveSettingsPanel() {
-  const modal = document.getElementById('modal-settings');
-  if (!modal) return;
-
-  const box = modal.querySelector('.modal-box, .modal-content') || modal;
-  if (!box || document.getElementById('drive-settings-panel')) return;
-
-  const panel = document.createElement('div');
-  panel.id = 'drive-settings-panel';
-  panel.className = 'drive-settings-panel';
-  panel.innerHTML = `
-    <h3>Google Drive</h3>
-    <p>Status: <strong id="drive-settings-status">not connected</strong></p>
-    <div class="drive-settings-buttons">
-      <button class="btn-secondary" type="button" onclick="connectDrive()">connect / reconnect</button>
-      <button class="btn-secondary" type="button" onclick="disconnectDrive()">disconnect</button>
-    </div>
-    <p class="drive-settings-note">On another PC/browser, connect once again.</p>
-  `;
-
-  const resetRow = Array.from(box.querySelectorAll('*')).find(el => (el.textContent || '').includes('reset everything'));
-  if (resetRow && resetRow.parentElement) {
-    resetRow.parentElement.insertAdjacentElement('afterend', panel);
-  } else {
-    const actions = box.querySelector('.modal-actions');
-    if (actions) box.insertBefore(panel, actions);
-    else box.appendChild(panel);
+function getGoogleDriveFileId(url) {
+  if (!url) return null;
+  const patterns = [
+    /\/file\/d\/([^/]+)/,
+    /[?&]id=([^&]+)/,
+    /\/document\/d\/([^/]+)/,
+    /\/presentation\/d\/([^/]+)/,
+    /\/spreadsheets\/d\/([^/]+)/
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) return match[1];
   }
-
-  updateDriveStatusUi();
+  return null;
 }
 
-// Wrap existing functions after they are defined.
-const originalRenderMainForDrive = renderMain;
-renderMain = function() {
-  originalRenderMainForDrive();
-  setTimeout(addSingleDriveUploadButton, 0);
-};
+function getDownloadUrl(url) {
+  const fileId = getGoogleDriveFileId(url);
+  if (!fileId) return url;
+  if (url.includes('/document/')) return `https://docs.google.com/document/d/${fileId}/export?format=pdf`;
+  if (url.includes('/presentation/')) return `https://docs.google.com/presentation/d/${fileId}/export/pdf`;
+  if (url.includes('/spreadsheets/')) return `https://docs.google.com/spreadsheets/d/${fileId}/export?format=xlsx`;
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+}
 
-const originalOpenSettingsForDrive = openSettings;
-openSettings = function() {
-  originalOpenSettingsForDrive();
-  setTimeout(addDriveSettingsPanel, 0);
-};
+function openCardUrl(url) {
+  if (!url) return;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    ensureDriveModal();
-    addSingleDriveUploadButton();
-  }, 300);
-});
-/* GOOGLE DRIVE CLEAN PATCH END */
+async function copyCardUrl(url) {
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    alert('link copied');
+  } catch (e) {
+    prompt('copy this link:', url);
+  }
+}
+
+function downloadCardUrl(url) {
+  if (!url) return;
+  window.open(getDownloadUrl(url), '_blank', 'noopener,noreferrer');
+}
 
 
 boot();

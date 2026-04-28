@@ -422,135 +422,36 @@ body {
 }
 
 
-/* Google Drive upload + visible link actions */
-.btn-upload {
-  border: 0.5px solid rgba(45, 128, 255, 0.35);
-  background: rgba(45, 128, 255, 0.08);
-  color: var(--text-primary);
-  border-radius: 999px;
-  padding: 8px 13px;
-  font-family: var(--mono);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.btn-upload:hover {
-  border-color: rgba(45, 128, 255, 0.6);
-  background: rgba(45, 128, 255, 0.14);
-}
-
-.card-link-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
-}
-
-.card-link-btn {
-  border: 0.5px solid var(--border-hover);
-  background: rgba(255,255,255,0.04);
-  color: var(--text-secondary);
-  border-radius: 999px;
-  padding: 5px 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.card-link-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--accent);
-}
-
-.upload-help,
-.upload-status {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.45;
-  margin-bottom: 12px;
-}
-
-.upload-status.error {
-  color: var(--danger);
-}
-
-.card-url {
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 700px) {
-  .main-actions {
-    gap: 6px;
-  }
-
-  .btn-upload,
-  .btn-add {
-    min-height: 36px;
-  }
-
-  .card-link-btn {
-    min-height: 32px;
-    padding: 6px 9px;
-  }
-}
-
-
-/* Google Drive settings/upload fixes */
-.settings-drive-panel {
-  padding: 10px 0;
-}
-.settings-drive-status,
-.settings-drive-note {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-.settings-drive-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 8px 0;
-}
-.btn-upload {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.upload-status.error {
-  color: var(--danger);
-}
-
-
-/* Clean Google Drive upload UI */
-#drive-upload-button {
-  margin-right: 8px;
+/* Google Drive upload */
+.drive-upload-header-btn {
+  margin-left: 12px;
+  min-height: 32px;
 }
 
 .drive-settings-panel {
-  margin: 14px 0;
+  margin: 12px 0;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255,255,255,0.03);
+  border-top: 0.5px solid var(--border);
+  border-bottom: 0.5px solid var(--border);
 }
 
-.drive-settings-panel h3 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-}
-
-.drive-settings-panel p,
-.drive-settings-note,
-.drive-upload-message {
-  color: var(--text-secondary);
+.drive-settings-title {
+  font-family: var(--mono);
   font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.drive-settings-status,
+.drive-settings-note,
+.drive-message {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
   line-height: 1.4;
 }
 
-.drive-settings-buttons {
+.drive-settings-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -575,8 +476,9 @@ body {
 }
 
 @media (max-width: 700px) {
-  #drive-upload-button {
-    min-height: 36px;
+  .drive-upload-header-btn {
+    width: 100%;
+    margin: 8px 0 0 0;
   }
 
   .card-actions {
@@ -588,4 +490,3 @@ body {
     min-height: 32px;
   }
 }
-
