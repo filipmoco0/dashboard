@@ -258,6 +258,18 @@
 
       <div class="settings-divider"></div>
 
+      <div class="settings-drive-panel">
+        <div class="settings-label" style="margin-bottom:6px;">Google Drive</div>
+        <div class="settings-drive-status">status: <span id="google-drive-status">not connected</span></div>
+        <div class="settings-drive-actions">
+          <button class="btn-action" type="button" onclick="connectGoogleDrive(true)">connect / reconnect</button>
+          <button class="btn-action" type="button" onclick="disconnectGoogleDrive()">disconnect</button>
+        </div>
+        <div class="settings-drive-note">Use this once per browser if upload asks again.</div>
+      </div>
+
+      <div class="settings-divider"></div>
+
       <div class="settings-row">
         <span class="settings-label">export data</span>
         <button class="btn-action" onclick="exportData()">export JSON</button>
