@@ -149,7 +149,6 @@ function openSettings() {
   document.getElementById('s-name').value    = state.settings.siteName;
   document.getElementById('s-tagline').value = state.settings.tagline;
   renderSettingsSections();
-  updateDriveStatus();
   document.getElementById('modal-settings').classList.add('open');
 }
 
@@ -331,31 +330,9 @@ async function removeSection(sectionId) {
 /* ═══════════════════════════════════════════════════════════
    MAIN PANEL
    ═══════════════════════════════════════════════════════════ */
-
-function renderHeaderDriveUploadButton(section) {
-  const actions = document.querySelector('.main-actions');
-  if (!actions) return;
-
-  document.querySelectorAll('#drive-upload-header-btn').forEach(el => el.remove());
-
-  if (!section || section.type === 'notes') return;
-
-  const addBtn = document.getElementById('btn-add-card');
-  const btn = document.createElement('button');
-  btn.id = 'drive-upload-header-btn';
-  btn.className = addBtn ? addBtn.className : 'btn-add';
-  btn.type = 'button';
-  btn.textContent = '↑ upload';
-  btn.onclick = openDriveUploadModal;
-
-  if (addBtn) actions.insertBefore(btn, addBtn);
-  else actions.appendChild(btn);
-}
-
 function renderMain() {
   const section = state.sections.find(s => s.id === state.activeSection);
   document.getElementById('main-title').textContent = section ? section.label : '—';
-  renderHeaderDriveUploadButton(section);
   if (section) renderGrid(section.id);
   else document.getElementById('main-grid').innerHTML = '';
 }
@@ -382,7 +359,7 @@ function renderGrid(sectionId) {
       card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openNoteModal(sectionId, item.id); };
       card.style.cursor = 'pointer';
     } else if (item.url) {
-      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openCardUrl(item.url); };
+      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) window.open(item.url, '_blank'); };
     }
 
     /* tags */
@@ -411,13 +388,8 @@ function renderGrid(sectionId) {
 
     card.innerHTML = `
       <div class="card-actions">
-        ${!isNote && item.url ? `
-          <button class="card-btn" title="open" onclick="event.stopPropagation(); openCardUrl('${escapeAttr(item.url || '')}')">↗</button>
-          <button class="card-btn" title="copy link" onclick="event.stopPropagation(); copyCardUrl('${escapeAttr(item.url || '')}')">⧉</button>
-          <button class="card-btn" title="download" onclick="event.stopPropagation(); downloadCardUrl('${escapeAttr(item.url || '')}')">↓</button>
-        ` : ''}
-        <button class="card-btn" title="edit" onclick="event.stopPropagation(); openEditCard('${sectionId}','${item.id}')">✎</button>
-        <button class="card-btn" title="delete" onclick="event.stopPropagation(); deleteCard('${sectionId}','${item.id}')">×</button>
+        <button class="card-btn" title="edit"   onclick="openEditCard('${sectionId}','${item.id}')">✎</button>
+        <button class="card-btn" title="delete" onclick="deleteCard('${sectionId}','${item.id}')">×</button>
       </div>
       <div class="card-icon ${item.color}">${item.icon || FALLBACK_ICONS[item.color] || '🔗'}</div>
       <div class="card-name">${item.name}</div>
@@ -653,289 +625,10 @@ async function saveSection() {
   closeSectionModal();
 }
 
-
-/* ─── google drive upload ───────────────────────────────────── */
-const driveState = {
-  accessToken: null,
-  expiresAt: 0
-};
-
-
-function updateDriveStatus() {
-  const el = document.getElementById('drive-status');
-  if (!el) return;
-  const connected = driveState.accessToken && Date.now() < driveState.expiresAt - 60000;
-  el.textContent = connected ? 'connected' : 'not connected';
-}
-
-function requestGoogleDriveToken(forceConsent = false) {
-  return new Promise((resolve, reject) => {
-    const clientId = window.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      reject(new Error('Missing GOOGLE_CLIENT_ID in config.js'));
-      return;
-    }
-
-    if (!window.google || !google.accounts || !google.accounts.oauth2) {
-      reject(new Error('Google login did not load. Refresh and try again.'));
-      return;
-    }
-
-    const tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      prompt: forceConsent ? 'consent select_account' : '',
-      callback: (response) => {
-        if (response.error) {
-          reject(new Error(response.error_description || response.error));
-          return;
-        }
-
-        driveState.accessToken = response.access_token;
-        driveState.expiresAt = Date.now() + ((response.expires_in || 3600) * 1000);
-        localStorage.setItem('googleDriveConnectedOnce', 'true');
-        updateDriveStatus();
-        resolve(response.access_token);
-      }
-    });
-
-    tokenClient.requestAccessToken();
-  });
-}
-
-async function getGoogleDriveToken() {
-  if (driveState.accessToken && Date.now() < driveState.expiresAt - 60000) {
-    return driveState.accessToken;
-  }
-
-  const hasConnectedBefore = localStorage.getItem('googleDriveConnectedOnce') === 'true';
-  return requestGoogleDriveToken(!hasConnectedBefore);
-}
-
-async function connectGoogleDrive() {
-  try {
-    await requestGoogleDriveToken(true);
-    alert('Google Drive connected.');
-  } catch (error) {
-    console.error(error);
-    alert(error.message || 'Google Drive connection failed.');
-  }
-}
-
-function disconnectGoogleDrive() {
-  if (driveState.accessToken && window.google?.accounts?.oauth2?.revoke) {
-    google.accounts.oauth2.revoke(driveState.accessToken, () => {});
-  }
-
-  driveState.accessToken = null;
-  driveState.expiresAt = 0;
-  localStorage.removeItem('googleDriveConnectedOnce');
-  updateDriveStatus();
-  alert('Google Drive disconnected on this browser.');
-}
-
-function openDriveUploadModal() {
-  const section = state.sections.find(s => s.id === state.activeSection);
-  if (!section || section.type === 'notes') {
-    alert('Open a normal section or projects section first.');
-    return;
-  }
-
-  document.getElementById('drive-file').value = '';
-  document.getElementById('drive-title').value = '';
-  document.getElementById('drive-desc').value = '';
-  document.getElementById('drive-message').textContent = '';
-  document.getElementById('modal-drive-upload').classList.add('open');
-}
-
-function closeDriveUploadModal() {
-  document.getElementById('modal-drive-upload').classList.remove('open');
-}
-
-function iconForUploadedFile(name) {
-  const n = (name || '').toLowerCase();
-  if (n.endsWith('.pdf')) return '📄';
-  if (n.endsWith('.doc') || n.endsWith('.docx')) return '📝';
-  if (n.endsWith('.ppt') || n.endsWith('.pptx')) return '📊';
-  if (n.endsWith('.xls') || n.endsWith('.xlsx')) return '📈';
-  if (/\.(png|jpe?g|gif|webp|svg)$/.test(n)) return '🖼️';
-  if (/\.(zip|rar|7z)$/.test(n)) return '🗜️';
-  return '📎';
-}
-
-async function uploadFileToGoogleDrive(file) {
-  const token = await getGoogleDriveToken();
-
-  const metadata = {
-    name: file.name,
-    mimeType: file.type || 'application/octet-stream'
-  };
-
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('file', file);
-
-  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form
-  });
-
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      driveState.accessToken = null;
-      driveState.expiresAt = 0;
-      updateDriveStatus();
-    }
-
-    throw new Error(result?.error?.message || 'Google Drive upload failed.');
-  }
-
-  await fetch(`https://www.googleapis.com/drive/v3/files/${result.id}/permissions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ role: 'reader', type: 'anyone' })
-  }).catch(() => {});
-
-  return {
-    id: result.id,
-    name: result.name || file.name,
-    url: result.webViewLink || `https://drive.google.com/file/d/${result.id}/view`
-  };
-}
-
-async function handleGoogleDriveUpload() {
-  const file = document.getElementById('drive-file').files[0];
-  const title = document.getElementById('drive-title').value.trim();
-  const desc = document.getElementById('drive-desc').value.trim();
-  const msg = document.getElementById('drive-message');
-
-  if (!file) {
-    alert('Choose a file first.');
-    return;
-  }
-
-  const section = state.sections.find(s => s.id === state.activeSection);
-  if (!section) {
-    alert('No section selected.');
-    return;
-  }
-
-  try {
-    msg.textContent = 'Uploading to Google Drive...';
-
-    const uploaded = await uploadFileToGoogleDrive(file);
-
-    msg.textContent = 'Saving dashboard card...';
-
-    const fields = {
-      name: title || uploaded.name,
-      desc,
-      url: uploaded.url,
-      icon: iconForUploadedFile(uploaded.name),
-      color: 'ic-blue',
-      visibility: section.type === 'projects' ? 'personal' : null,
-      progress: section.type === 'projects' ? 'in-progress' : null,
-      linkedNoteId: null,
-      content: ''
-    };
-
-    const pos = (state.cards[state.activeSection] || []).length;
-    const row = await dbInsertCard(state.user.id, state.activeSection, fields, pos);
-    if (!state.cards[state.activeSection]) state.cards[state.activeSection] = [];
-    state.cards[state.activeSection].push(mapCard(row));
-
-    renderGrid(state.activeSection);
-    closeDriveUploadModal();
-  } catch (error) {
-    console.error(error);
-    msg.textContent = error.message || 'Upload failed.';
-    alert(error.message || 'Upload failed.');
-  }
-}
-
-function escapeAttr(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function getGoogleDriveFileId(url) {
-  if (!url) return null;
-  const patterns = [
-    /\/file\/d\/([^/]+)/,
-    /[?&]id=([^&]+)/,
-    /\/document\/d\/([^/]+)/,
-    /\/presentation\/d\/([^/]+)/,
-    /\/spreadsheets\/d\/([^/]+)/
-  ];
-
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match && match[1]) return match[1];
-  }
-
-  return null;
-}
-
-function getDownloadUrl(url) {
-  const fileId = getGoogleDriveFileId(url);
-  if (!fileId) return url;
-
-  if (url.includes('/document/')) return `https://docs.google.com/document/d/${fileId}/export?format=pdf`;
-  if (url.includes('/presentation/')) return `https://docs.google.com/presentation/d/${fileId}/export/pdf`;
-  if (url.includes('/spreadsheets/')) return `https://docs.google.com/spreadsheets/d/${fileId}/export?format=xlsx`;
-
-  return `https://drive.google.com/uc?export=download&id=${fileId}`;
-}
-
-function openCardUrl(url) {
-  if (!url) return;
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-async function copyCardUrl(url) {
-  if (!url) return;
-
-  try {
-    await navigator.clipboard.writeText(url);
-    alert('link copied');
-  } catch (e) {
-    prompt('copy this link:', url);
-  }
-}
-
-function downloadCardUrl(url) {
-  if (!url) return;
-  window.open(getDownloadUrl(url), '_blank', 'noopener,noreferrer');
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const driveFile = document.getElementById('drive-file');
-  const driveTitle = document.getElementById('drive-title');
-
-  if (driveFile && driveTitle) {
-    driveFile.addEventListener('change', () => {
-      if (driveFile.files[0] && !driveTitle.value.trim()) {
-        driveTitle.value = driveFile.files[0].name;
-      }
-    });
-  }
-});
-
-
 /* ═══════════════════════════════════════════════════════════
    GLOBAL EVENTS
    ═══════════════════════════════════════════════════════════ */
-['modal-card','modal-note','modal-section','modal-settings','modal-drive-upload'].forEach(id => {
+['modal-card','modal-note','modal-section','modal-settings'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener('click', e => {
     if (e.target === el) { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
