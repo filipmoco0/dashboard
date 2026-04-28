@@ -1,1 +1,1 @@
-{'old_upload_ids': 0, 'header_upload_id_count': 3, 'render_main_has_call': True, 'settings_has_call': True, 'gsi_script_count': 1, 'settings_panel_id_count': 4}
+{'btn_drive_upload_in_index': 1, 'btn_drive_upload_in_app': 1, 'modal_drive_upload_in_index': 1, 'drive_settings_in_index': 1, 'gsi_script_count': 1}
