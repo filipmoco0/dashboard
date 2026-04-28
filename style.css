@@ -423,12 +423,6 @@ body {
 
 
 /* Google Drive upload */
-#btn-drive-upload {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .drive-message,
 .drive-note,
 .drive-status {
@@ -467,8 +461,7 @@ body {
     gap: 6px;
   }
 
-  #btn-drive-upload,
-  #btn-add-card {
+    #btn-add-card {
     min-height: 34px;
   }
 
@@ -480,5 +473,18 @@ body {
     min-width: 32px;
     min-height: 32px;
   }
+}
+
+
+
+/* Google Drive dedupe fix */
+#drive-upload-header-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#drive-settings-panel {
+  margin-top: 12px;
 }
 

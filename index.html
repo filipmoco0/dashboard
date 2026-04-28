@@ -58,8 +58,7 @@
       <div class="main-header">
         <div class="main-title" id="main-title">—</div>
         <div class="main-actions">
-          <button class="btn-add" id="btn-drive-upload" onclick="openDriveUploadModal()">↑ upload</button>
-          <button class="btn-add" id="btn-add-card" onclick="openCardModal()">+ add</button>
+<button class="btn-add" id="btn-add-card" onclick="openCardModal()">+ add</button>
         </div>
       </div>
       <div class="main-body">
@@ -199,38 +198,6 @@
       </div>
     </div>
   </div>
-
-
-  <!-- GOOGLE DRIVE UPLOAD MODAL START -->
-  <div class="modal-backdrop" id="modal-drive-upload">
-    <div class="modal">
-      <div class="modal-title">upload to Google Drive</div>
-
-      <div class="field">
-        <label>file</label>
-        <input id="drive-file" type="file" />
-      </div>
-
-      <div class="field">
-        <label>title</label>
-        <input id="drive-title" type="text" placeholder="auto from filename" />
-      </div>
-
-      <div class="field">
-        <label>description</label>
-        <input id="drive-desc" type="text" placeholder="optional" />
-      </div>
-
-      <div class="drive-message" id="drive-message"></div>
-
-      <div class="modal-actions">
-        <button class="btn-cancel" onclick="closeDriveUploadModal()">cancel</button>
-        <button class="btn-save" onclick="handleGoogleDriveUpload()">upload</button>
-      </div>
-    </div>
-  </div>
-  <!-- GOOGLE DRIVE UPLOAD MODAL END -->
-
   <!-- ══════════════════════════════════════════════════════
        SETTINGS MODAL
   ═══════════════════════════════════════════════════════ -->
@@ -251,21 +218,6 @@
 
       <div class="settings-label" style="margin-bottom:6px;">sections order</div>
       <div id="settings-sections-list"></div>
-
-      <!-- GOOGLE DRIVE SETTINGS START -->
-      <div class="settings-divider"></div>
-      <div class="settings-row">
-        <span class="settings-label">Google Drive</span>
-        <span class="drive-status" id="drive-status">not connected</span>
-      </div>
-      <div class="settings-row drive-settings-buttons">
-        <button class="btn-action" onclick="connectGoogleDrive()">connect / reconnect</button>
-        <button class="btn-action" onclick="disconnectGoogleDrive()">disconnect</button>
-      </div>
-      <div class="drive-note">On another browser or PC, connect once again.</div>
-      <!-- GOOGLE DRIVE SETTINGS END -->
-
-
       <div class="settings-divider"></div>
 
       <div class="settings-row">

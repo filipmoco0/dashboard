@@ -331,10 +331,31 @@ async function removeSection(sectionId) {
 /* ═══════════════════════════════════════════════════════════
    MAIN PANEL
    ═══════════════════════════════════════════════════════════ */
+
+function renderHeaderDriveUploadButton(section) {
+  const actions = document.querySelector('.main-actions');
+  if (!actions) return;
+
+  document.querySelectorAll('#drive-upload-header-btn').forEach(el => el.remove());
+
+  if (!section || section.type === 'notes') return;
+
+  const addBtn = document.getElementById('btn-add-card');
+  const btn = document.createElement('button');
+  btn.id = 'drive-upload-header-btn';
+  btn.className = addBtn ? addBtn.className : 'btn-add';
+  btn.type = 'button';
+  btn.textContent = '↑ upload';
+  btn.onclick = openDriveUploadModal;
+
+  if (addBtn) actions.insertBefore(btn, addBtn);
+  else actions.appendChild(btn);
+}
+
 function renderMain() {
   const section = state.sections.find(s => s.id === state.activeSection);
   document.getElementById('main-title').textContent = section ? section.label : '—';
-  updateDriveUploadButton(section);
+  renderHeaderDriveUploadButton(section);
   if (section) renderGrid(section.id);
   else document.getElementById('main-grid').innerHTML = '';
 }
@@ -639,11 +660,6 @@ const driveState = {
   expiresAt: 0
 };
 
-function updateDriveUploadButton(section) {
-  const btn = document.getElementById('btn-drive-upload');
-  if (!btn) return;
-  btn.style.display = section && section.type !== 'notes' ? 'inline-flex' : 'none';
-}
 
 function updateDriveStatus() {
   const el = document.getElementById('drive-status');
