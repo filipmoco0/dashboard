@@ -1,0 +1,26 @@
+Google Drive upload setup
+
+This version uploads files from the dashboard to Google Drive and then creates a card with the uploaded file link.
+
+Files changed:
+- config.js: added window.GOOGLE_CLIENT_ID
+- index.html: added Google Identity script and upload modal
+- app.js: added Drive upload code and visible link action buttons
+- style.css: added upload/button styling
+
+Your OAuth Client ID is already in config.js:
+717392216433-8k34hpgbvc68mq5ub5u44n6umcdj4jvk.apps.googleusercontent.com
+
+Before using it:
+1. In Google Cloud Console, enable Google Drive API for this project.
+2. OAuth consent screen: add your Gmail account as a test user.
+3. OAuth client Authorized JavaScript origins must include:
+   https://moco.wtf
+   and any Render test URL you use, for example https://dashboard-v624.onrender.com
+4. Do NOT upload client_secret JSON to GitHub. Do NOT put client_secret in website code.
+
+Deploy:
+1. Replace app.js, index.html, config.js, and style.css in GitHub.
+2. Render redeploys.
+3. Open https://moco.wtf and hard refresh.
+4. Click "↑ upload".

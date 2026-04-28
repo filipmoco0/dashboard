@@ -58,6 +58,7 @@
       <div class="main-header">
         <div class="main-title" id="main-title">—</div>
         <div class="main-actions">
+          <button class="btn-upload" id="btn-upload-drive" onclick="openDriveUploadModal()">↑ upload</button>
           <button class="btn-add" id="btn-add-card" onclick="openCardModal()">+ add</button>
         </div>
       </div>
@@ -132,6 +133,41 @@
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCardModal()">cancel</button>
         <button class="btn-save"   onclick="saveCard()">save</button>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GOOGLE DRIVE UPLOAD MODAL
+  ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-drive-upload">
+    <div class="modal">
+      <div class="modal-title">upload to Google Drive</div>
+
+      <div class="upload-help">
+        Choose a file. The dashboard will upload it to your Google Drive, then add it as a card here.
+      </div>
+
+      <div class="field">
+        <label>file</label>
+        <input id="drive-file" type="file" />
+      </div>
+      <div class="field">
+        <label>title</label>
+        <input id="drive-title" type="text" placeholder="auto uses file name" />
+      </div>
+      <div class="field">
+        <label>description</label>
+        <input id="drive-desc" type="text" placeholder="optional note" />
+      </div>
+
+      <div class="upload-status" id="drive-upload-status"></div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeDriveUploadModal()">cancel</button>
+        <button class="btn-save" id="drive-upload-btn" onclick="uploadSelectedFileToDrive()">upload</button>
       </div>
     </div>
   </div>
@@ -264,6 +300,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="config.js"></script>
   <script src="db.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="app.js"></script>
 </body>
 </html>

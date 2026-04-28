@@ -356,24 +356,16 @@ function renderGrid(sectionId) {
     card.className = 'card' + (!isNote && item.url ? ' card-link' : '');
 
     if (isNote) {
-      card.onclick = e => {
-        if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) {
-          openNoteModal(sectionId, item.id);
-        }
-      };
+      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openNoteModal(sectionId, item.id); };
       card.style.cursor = 'pointer';
     } else if (item.url) {
-      card.onclick = e => {
-        if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) {
-          openCardUrl(item.url);
-        }
-      };
+      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder') && !e.target.closest('.card-link-actions')) openCardUrl(item.url); };
     }
 
     /* tags */
     const tags = [];
     if (section.type === 'projects') {
-      if (item.visibility) tags.push(`<span class="tag tag-${escapeAttr(item.visibility)}">${escapeAttr(item.visibility)}</span>`);
+      if (item.visibility) tags.push(`<span class="tag tag-${item.visibility}">${item.visibility}</span>`);
       if (item.progress) {
         const wip = item.progress === 'in-progress';
         tags.push(`<span class="tag-progress"><span class="progress-dot ${wip ? 'dot-inprogress' : 'dot-done'}"></span>${wip ? 'in progress' : 'done'}</span>`);
@@ -381,7 +373,7 @@ function renderGrid(sectionId) {
     }
     if (!isNote && item.linkedNoteId) {
       const note = findNoteById(item.linkedNoteId);
-      if (note) tags.push(`<button class="tag-note-link" onclick="openNoteFromTag(event,'${item.linkedNoteId}')">📝 ${escapeAttr(note.name)}</button>`);
+      if (note) tags.push(`<button class="tag-note-link" onclick="openNoteFromTag(event,'${item.linkedNoteId}')">📝 ${note.name}</button>`);
     }
     const tagHtml = tags.length ? `<div class="tag-row">${tags.join('')}</div>` : '';
 
@@ -390,38 +382,32 @@ function renderGrid(sectionId) {
     const canDown = idx < items.length - 1;
     const reorderHtml = `
       <div class="card-reorder">
-        ${canUp   ? `<button class="card-btn js-move-up" title="move left">←</button>` : ''}
-        ${canDown ? `<button class="card-btn js-move-down" title="move right">→</button>` : ''}
+        ${canUp   ? `<button class="card-btn" title="move left"  onclick="moveCardUp('${sectionId}','${item.id}')">←</button>` : ''}
+        ${canDown ? `<button class="card-btn" title="move right" onclick="moveCardDown('${sectionId}','${item.id}')">→</button>` : ''}
       </div>`;
+
+    const safeUrl = escapeAttr(item.url || '');
 
     card.innerHTML = `
       <div class="card-actions">
-        ${!isNote && item.url ? `
-          <button class="card-btn js-open-link" title="open">↗</button>
-          <button class="card-btn js-copy-link" title="copy link">⧉</button>
-          <button class="card-btn js-download-link" title="download">↓</button>
-        ` : ''}
-        <button class="card-btn js-edit-card" title="edit">✎</button>
-        <button class="card-btn js-delete-card" title="delete">×</button>
+        <button class="card-btn" title="edit" onclick="event.stopPropagation(); openEditCard('${sectionId}','${item.id}')">✎</button>
+        <button class="card-btn" title="delete" onclick="event.stopPropagation(); deleteCard('${sectionId}','${item.id}')">×</button>
       </div>
-      <div class="card-icon ${escapeAttr(item.color)}">${escapeAttr(item.icon || FALLBACK_ICONS[item.color] || '🔗')}</div>
+      <div class="card-icon ${item.color}">${item.icon || FALLBACK_ICONS[item.color] || '🔗'}</div>
       <div class="card-name">${escapeAttr(item.name)}</div>
       ${item.desc ? `<div class="card-desc">${escapeAttr(item.desc)}</div>` : ''}
       ${isNote ? `<div class="card-note-hint">tap to open</div>` : ''}
-      ${!isNote && item.url ? `<div class="card-url">${escapeAttr(item.url.replace(/^https?:\/\//, ''))}</div>` : ''}
+      ${!isNote && item.url ? `
+        <div class="card-url">${escapeAttr(item.url.replace(/^https?:\/\//, ''))}</div>
+        <div class="card-link-actions">
+          <button class="card-link-btn" type="button" onclick="event.stopPropagation(); openCardUrl('${safeUrl}')">↗ open</button>
+          <button class="card-link-btn" type="button" onclick="event.stopPropagation(); copyCardUrl('${safeUrl}')">⧉ copy</button>
+          <button class="card-link-btn" type="button" onclick="event.stopPropagation(); downloadCardUrl('${safeUrl}')">↓ download</button>
+        </div>
+      ` : ''}
       ${tagHtml}
       ${reorderHtml}
     `;
-
-    const stop = fn => event => { event.stopPropagation(); fn(); };
-    card.querySelector('.js-open-link')?.addEventListener('click', stop(() => openCardUrl(item.url)));
-    card.querySelector('.js-copy-link')?.addEventListener('click', stop(() => copyCardUrl(item.url)));
-    card.querySelector('.js-download-link')?.addEventListener('click', stop(() => downloadCardUrl(item.url)));
-    card.querySelector('.js-edit-card')?.addEventListener('click', stop(() => openEditCard(sectionId, item.id)));
-    card.querySelector('.js-delete-card')?.addEventListener('click', stop(() => deleteCard(sectionId, item.id)));
-    card.querySelector('.js-move-up')?.addEventListener('click', stop(() => moveCardUp(sectionId, item.id)));
-    card.querySelector('.js-move-down')?.addEventListener('click', stop(() => moveCardDown(sectionId, item.id)));
-
     grid.appendChild(card);
   });
 }
@@ -651,21 +637,196 @@ async function saveSection() {
 /* ═══════════════════════════════════════════════════════════
    GLOBAL EVENTS
    ═══════════════════════════════════════════════════════════ */
-['modal-card','modal-note','modal-section','modal-settings'].forEach(id => {
+['modal-card','modal-drive-upload','modal-note','modal-section','modal-settings'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener('click', e => {
-    if (e.target === el) { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
+    if (e.target === el) { closeCardModal(); closeDriveUploadModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
   });
 });
 
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeCardModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
+  if (e.key === 'Escape') { closeCardModal(); closeDriveUploadModal(); closeNoteModal(); closeSectionModal(); closeSettings(); }
 });
 
 document.getElementById('l-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
+
+
+/* ═══════════════════════════════════════════════════════════
+   GOOGLE DRIVE UPLOAD
+   ═══════════════════════════════════════════════════════════ */
+let googleDriveTokenClient = null;
+let googleDriveAccessToken = null;
+
+function currentSectionAllowsUpload() {
+  const section = state.sections.find(s => s.id === state.activeSection);
+  return section && section.type !== 'notes';
+}
+
+function openDriveUploadModal() {
+  if (!currentSectionAllowsUpload()) {
+    alert('Switch to a normal/cards section first. Uploads are saved as link cards, not notes.');
+    return;
+  }
+
+  const modal = document.getElementById('modal-drive-upload');
+  if (!modal) return alert('Upload modal is missing from index.html.');
+
+  document.getElementById('drive-file').value = '';
+  document.getElementById('drive-title').value = '';
+  document.getElementById('drive-desc').value = '';
+  setDriveUploadStatus('');
+  modal.classList.add('open');
+}
+
+function closeDriveUploadModal() {
+  const modal = document.getElementById('modal-drive-upload');
+  if (modal) modal.classList.remove('open');
+}
+
+function setDriveUploadStatus(message, isError = false) {
+  const el = document.getElementById('drive-upload-status');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = 'upload-status' + (isError ? ' error' : '');
+}
+
+function getDriveToken() {
+  return new Promise((resolve, reject) => {
+    if (!window.GOOGLE_CLIENT_ID) {
+      reject(new Error('Missing GOOGLE_CLIENT_ID in config.js'));
+      return;
+    }
+
+    if (!window.google || !google.accounts || !google.accounts.oauth2) {
+      reject(new Error('Google login library is not loaded yet. Refresh and try again.'));
+      return;
+    }
+
+    googleDriveTokenClient = googleDriveTokenClient || google.accounts.oauth2.initTokenClient({
+      client_id: window.GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: response => {
+        if (response.error) reject(new Error(response.error));
+        else {
+          googleDriveAccessToken = response.access_token;
+          resolve(googleDriveAccessToken);
+        }
+      },
+    });
+
+    googleDriveTokenClient.requestAccessToken({ prompt: googleDriveAccessToken ? '' : 'consent' });
+  });
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(reader.error || new Error('Could not read file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadFileToGoogleDrive(file, token) {
+  const metadata = { name: file.name, mimeType: file.type || 'application/octet-stream' };
+  const boundary = 'moco_dashboard_' + Date.now();
+  const base64Data = await fileToBase64(file);
+  const body = [
+    `--${boundary}`,
+    'Content-Type: application/json; charset=UTF-8',
+    '',
+    JSON.stringify(metadata),
+    `--${boundary}`,
+    `Content-Type: ${file.type || 'application/octet-stream'}`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    base64Data,
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
+
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': `multipart/related; boundary=${boundary}`,
+    },
+    body,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error?.message || 'Google Drive upload failed.');
+  }
+  return data;
+}
+
+function iconForFile(file) {
+  const name = (file.name || '').toLowerCase();
+  const type = file.type || '';
+  if (type.includes('image') || /\.(png|jpg|jpeg|gif|webp|svg)$/.test(name)) return '🖼️';
+  if (type.includes('pdf') || name.endsWith('.pdf')) return '📄';
+  if (/\.(doc|docx)$/.test(name)) return '📝';
+  if (/\.(ppt|pptx)$/.test(name)) return '📊';
+  if (/\.(xls|xlsx|csv)$/.test(name)) return '📈';
+  if (/\.(zip|rar|7z)$/.test(name)) return '🗜️';
+  return '📎';
+}
+
+async function uploadSelectedFileToDrive() {
+  const fileInput = document.getElementById('drive-file');
+  const uploadBtn = document.getElementById('drive-upload-btn');
+  const file = fileInput?.files?.[0];
+
+  if (!file) {
+    setDriveUploadStatus('Choose a file first.', true);
+    return;
+  }
+  if (!currentSectionAllowsUpload()) {
+    setDriveUploadStatus('Switch to a normal/cards section first.', true);
+    return;
+  }
+
+  try {
+    uploadBtn.disabled = true;
+    setDriveUploadStatus('Connecting to Google Drive...');
+    const token = await getDriveToken();
+
+    setDriveUploadStatus('Uploading to Google Drive...');
+    const uploaded = await uploadFileToGoogleDrive(file, token);
+
+    setDriveUploadStatus('Saving card in dashboard...');
+    const title = document.getElementById('drive-title').value.trim() || uploaded.name || file.name;
+    const desc = document.getElementById('drive-desc').value.trim() || `${Math.ceil(file.size / 1024)} KB · Google Drive`;
+    const pos = (state.cards[state.activeSection] || []).length;
+    const fields = {
+      name: title,
+      desc,
+      url: uploaded.webViewLink || `https://drive.google.com/file/d/${uploaded.id}/view`,
+      icon: iconForFile(file),
+      color: 'ic-blue',
+      visibility: null,
+      progress: null,
+      linkedNoteId: null,
+      content: '',
+    };
+
+    const row = await dbInsertCard(state.user.id, state.activeSection, fields, pos);
+    if (!state.cards[state.activeSection]) state.cards[state.activeSection] = [];
+    state.cards[state.activeSection].push(mapCard(row));
+
+    renderGrid(state.activeSection);
+    closeDriveUploadModal();
+  } catch (err) {
+    console.error(err);
+    setDriveUploadStatus(err.message || 'Upload failed.', true);
+  } finally {
+    uploadBtn.disabled = false;
+  }
+}
 
 /* ─── init ────────────────────────────────────────────────── */
 function escapeAttr(value) {
