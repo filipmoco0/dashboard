@@ -359,7 +359,7 @@ function renderGrid(sectionId) {
       card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openNoteModal(sectionId, item.id); };
       card.style.cursor = 'pointer';
     } else if (item.url) {
-      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) window.open(item.url, '_blank'); };
+      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openCardUrl(item.url); };
     }
 
     /* tags */
@@ -386,10 +386,17 @@ function renderGrid(sectionId) {
         ${canDown ? `<button class="card-btn" title="move right" onclick="moveCardDown('${sectionId}','${item.id}')">→</button>` : ''}
       </div>`;
 
+    const safeUrl = escapeAttr(item.url || '');
+
     card.innerHTML = `
       <div class="card-actions">
-        <button class="card-btn" title="edit"   onclick="openEditCard('${sectionId}','${item.id}')">✎</button>
-        <button class="card-btn" title="delete" onclick="deleteCard('${sectionId}','${item.id}')">×</button>
+        ${!isNote && item.url ? `
+          <button class="card-btn" title="open" onclick="event.stopPropagation(); openCardUrl('${safeUrl}')">↗</button>
+          <button class="card-btn" title="copy link" onclick="event.stopPropagation(); copyCardUrl('${safeUrl}')">⧉</button>
+          <button class="card-btn" title="download" onclick="event.stopPropagation(); downloadCardUrl('${safeUrl}')">↓</button>
+        ` : ''}
+        <button class="card-btn" title="edit" onclick="event.stopPropagation(); openEditCard('${sectionId}','${item.id}')">✎</button>
+        <button class="card-btn" title="delete" onclick="event.stopPropagation(); deleteCard('${sectionId}','${item.id}')">×</button>
       </div>
       <div class="card-icon ${item.color}">${item.icon || FALLBACK_ICONS[item.color] || '🔗'}</div>
       <div class="card-name">${item.name}</div>
