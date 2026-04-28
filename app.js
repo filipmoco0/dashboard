@@ -356,16 +356,24 @@ function renderGrid(sectionId) {
     card.className = 'card' + (!isNote && item.url ? ' card-link' : '');
 
     if (isNote) {
-      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openNoteModal(sectionId, item.id); };
+      card.onclick = e => {
+        if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) {
+          openNoteModal(sectionId, item.id);
+        }
+      };
       card.style.cursor = 'pointer';
     } else if (item.url) {
-      card.onclick = e => { if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) openCardUrl(item.url); };
+      card.onclick = e => {
+        if (!e.target.closest('.card-actions') && !e.target.closest('.card-reorder')) {
+          openCardUrl(item.url);
+        }
+      };
     }
 
     /* tags */
     const tags = [];
     if (section.type === 'projects') {
-      if (item.visibility) tags.push(`<span class="tag tag-${item.visibility}">${item.visibility}</span>`);
+      if (item.visibility) tags.push(`<span class="tag tag-${escapeAttr(item.visibility)}">${escapeAttr(item.visibility)}</span>`);
       if (item.progress) {
         const wip = item.progress === 'in-progress';
         tags.push(`<span class="tag-progress"><span class="progress-dot ${wip ? 'dot-inprogress' : 'dot-done'}"></span>${wip ? 'in progress' : 'done'}</span>`);
@@ -373,7 +381,7 @@ function renderGrid(sectionId) {
     }
     if (!isNote && item.linkedNoteId) {
       const note = findNoteById(item.linkedNoteId);
-      if (note) tags.push(`<button class="tag-note-link" onclick="openNoteFromTag(event,'${item.linkedNoteId}')">📝 ${note.name}</button>`);
+      if (note) tags.push(`<button class="tag-note-link" onclick="openNoteFromTag(event,'${item.linkedNoteId}')">📝 ${escapeAttr(note.name)}</button>`);
     }
     const tagHtml = tags.length ? `<div class="tag-row">${tags.join('')}</div>` : '';
 
@@ -382,30 +390,38 @@ function renderGrid(sectionId) {
     const canDown = idx < items.length - 1;
     const reorderHtml = `
       <div class="card-reorder">
-        ${canUp   ? `<button class="card-btn" title="move left"  onclick="moveCardUp('${sectionId}','${item.id}')">←</button>` : ''}
-        ${canDown ? `<button class="card-btn" title="move right" onclick="moveCardDown('${sectionId}','${item.id}')">→</button>` : ''}
+        ${canUp   ? `<button class="card-btn js-move-up" title="move left">←</button>` : ''}
+        ${canDown ? `<button class="card-btn js-move-down" title="move right">→</button>` : ''}
       </div>`;
-
-    const safeUrl = escapeAttr(item.url || '');
 
     card.innerHTML = `
       <div class="card-actions">
         ${!isNote && item.url ? `
-          <button class="card-btn" title="open" onclick="event.stopPropagation(); openCardUrl('${safeUrl}')">↗</button>
-          <button class="card-btn" title="copy link" onclick="event.stopPropagation(); copyCardUrl('${safeUrl}')">⧉</button>
-          <button class="card-btn" title="download" onclick="event.stopPropagation(); downloadCardUrl('${safeUrl}')">↓</button>
+          <button class="card-btn js-open-link" title="open">↗</button>
+          <button class="card-btn js-copy-link" title="copy link">⧉</button>
+          <button class="card-btn js-download-link" title="download">↓</button>
         ` : ''}
-        <button class="card-btn" title="edit" onclick="event.stopPropagation(); openEditCard('${sectionId}','${item.id}')">✎</button>
-        <button class="card-btn" title="delete" onclick="event.stopPropagation(); deleteCard('${sectionId}','${item.id}')">×</button>
+        <button class="card-btn js-edit-card" title="edit">✎</button>
+        <button class="card-btn js-delete-card" title="delete">×</button>
       </div>
-      <div class="card-icon ${item.color}">${item.icon || FALLBACK_ICONS[item.color] || '🔗'}</div>
-      <div class="card-name">${item.name}</div>
-      ${item.desc ? `<div class="card-desc">${item.desc}</div>` : ''}
+      <div class="card-icon ${escapeAttr(item.color)}">${escapeAttr(item.icon || FALLBACK_ICONS[item.color] || '🔗')}</div>
+      <div class="card-name">${escapeAttr(item.name)}</div>
+      ${item.desc ? `<div class="card-desc">${escapeAttr(item.desc)}</div>` : ''}
       ${isNote ? `<div class="card-note-hint">tap to open</div>` : ''}
-      ${!isNote && item.url ? `<div class="card-url">${item.url.replace(/^https?:\/\//, '')}</div>` : ''}
+      ${!isNote && item.url ? `<div class="card-url">${escapeAttr(item.url.replace(/^https?:\/\//, ''))}</div>` : ''}
       ${tagHtml}
       ${reorderHtml}
     `;
+
+    const stop = fn => event => { event.stopPropagation(); fn(); };
+    card.querySelector('.js-open-link')?.addEventListener('click', stop(() => openCardUrl(item.url)));
+    card.querySelector('.js-copy-link')?.addEventListener('click', stop(() => copyCardUrl(item.url)));
+    card.querySelector('.js-download-link')?.addEventListener('click', stop(() => downloadCardUrl(item.url)));
+    card.querySelector('.js-edit-card')?.addEventListener('click', stop(() => openEditCard(sectionId, item.id)));
+    card.querySelector('.js-delete-card')?.addEventListener('click', stop(() => deleteCard(sectionId, item.id)));
+    card.querySelector('.js-move-up')?.addEventListener('click', stop(() => moveCardUp(sectionId, item.id)));
+    card.querySelector('.js-move-down')?.addEventListener('click', stop(() => moveCardDown(sectionId, item.id)));
+
     grid.appendChild(card);
   });
 }

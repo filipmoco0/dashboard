@@ -1,0 +1,1 @@
+This ZIP has app.js patched so Google Drive/link cards show Open, Copy, Download, Edit, and Delete buttons. Upload app.js and style.css to GitHub, then redeploy Render.
